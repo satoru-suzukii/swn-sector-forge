@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Sector Forge</title>
+  <desc id="desc">A red star inside a cyan orbital hexagon on a deep navy background.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#101d30"/>
+      <stop offset="1" stop-color="#060b14"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#83eeff"/>
+      <stop offset="1" stop-color="#16a8df"/>
+    </linearGradient>
+    <linearGradient id="star" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff0f1"/>
+      <stop offset="0.42" stop-color="#ff5a68"/>
+      <stop offset="1" stop-color="#e51f3f"/>
+    </linearGradient>
+    <filter id="red-glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="1.6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="64" height="64" rx="13" fill="url(#bg)"/>
+  <path d="M32 4.5 55.5 18v28L32 59.5 8.5 46V18Z" fill="#0a1422" stroke="url(#edge)" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M32 10 50 20.4v21.2L32 52 14 41.6V20.4Z" fill="none" stroke="#245b7b" stroke-width="1" opacity=".9"/>
+  <ellipse cx="32" cy="32" rx="16.5" ry="8.8" fill="none" stroke="#5fd9f5" stroke-width="1.2" opacity=".9" transform="rotate(-32 32 32)"/>
+  <ellipse cx="32" cy="32" rx="16.5" ry="8.8" fill="none" stroke="#287ba3" stroke-width="1" opacity=".85" transform="rotate(42 32 32)"/>
+  <circle cx="17.5" cy="24.3" r="2.3" fill="#8defff"/>
+  <circle cx="45.2" cy="41.7" r="2" fill="#8defff"/>
+  <circle cx="43.5" cy="18.3" r="1.5" fill="#ff5365"/>
+  <path d="M32 16.5 35.9 27.8 47.5 32 35.9 36.1 32 47.5 28.1 36.1 16.5 32 28.1 27.8Z" fill="url(#star)" filter="url(#red-glow)"/>
+  <circle cx="32" cy="32" r="2.6" fill="#fff6f6"/>
+  <path d="M32 6.8v4.3M32 52.9v4.3M10.8 32h4.4M48.8 32h4.4" stroke="#d4f9ff" stroke-width="1.2" stroke-linecap="round" opacity=".8"/>
+</svg>

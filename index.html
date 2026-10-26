@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="theme-color" content="#0a101b">
+	<meta name="description" content="Generate, explore, edit, and share Stars Without Number sectors.">
+	<link rel="icon" type="image/svg+xml" href="./favicon.svg">
+	<link rel="icon" type="image/png" sizes="32x32" href="./favicon-32x32.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="./favicon-16x16.png">
+	<link rel="shortcut icon" href="./favicon.ico">
+	<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
+	<title>Sector Forge — Stars Without Number</title>
+	<link rel="stylesheet" href="planet.css">
+</head>
+<body>
+	<main id="generator-container" class="hide-section app-shell generator-shell">
+		<header class="app-topbar">
+			<a class="brand-lockup" href="#" aria-label="Sector Forge home">
+				<span class="brand-mark" aria-hidden="true">✳</span>
+				<span class="brand-copy"><strong>SECTOR<span class="brand-slash">/</span>FORGE</strong><small>STARS WITHOUT NUMBER TOOLKIT</small></span>
+			</a>
+			<div class="topbar-right"><span class="status-dot"></span><span>LOCAL GENERATOR</span><span class="topbar-divider"></span><span class="version-label">SECTOR FORGE 1.0</span></div>
+		</header>
+
+		<section class="hero-grid">
+			<div class="hero-copy">
+				<p class="eyebrow"><span class="eyebrow-line"></span> SECTOR CARTOGRAPHY / 001</p>
+				<h1>Chart the<br><em>unknown.</em></h1>
+				<p class="hero-description">A whole corner of the universe, ready for your next campaign. Generate a living sector full of worlds, factions, corporations, faiths, and things best left undiscovered.</p>
+				<div class="hero-actions">
+					<button id="generate-button" class="button button-primary"><span class="button-icon" aria-hidden="true">✳</span><span><strong>Generate a sector</strong><small>CREATE A NEW REGION OF SPACE</small></span><span class="button-arrow" aria-hidden="true">↗</span></button>
+				</div>
+				<div class="generation-options">
+					<label for="world-generation-mode">World generation rules</label>
+					<select id="world-generation-mode">
+						<option value="core">Revised Edition core</option>
+						<option value="expanded">Expanded World Generation profile</option>
+					</select>
+					<p>Expanded mode adds approximate population counts, population-linked tech outcomes, and a third optional tag candidate.</p>
+				</div>
+				<details id="advanced-generation-options" class="generation-advanced">
+					<summary><span>Advanced generation options</span><small>OPTIONAL · DEFAULTS ARE UNCHANGED</small></summary>
+					<div class="generation-advanced-grid">
+						<div class="generation-advanced-field">
+							<label for="system-density">System density</label>
+							<select id="system-density">
+								<option value="default" selected>Default — current SWN baseline (21–30)</option>
+								<option value="empty">Empty — no systems</option>
+								<option value="scarce">Scarce — 8–14 systems</option>
+								<option value="normal">Normal — 31–40 systems</option>
+								<option value="crowded">Crowded — 45–65 systems</option>
+							</select>
+						</div>
+						<div class="generation-advanced-field">
+							<label for="world-density">World &amp; orbital content</label>
+							<select id="world-density">
+								<option value="default" selected>Default — current generation rules</option>
+								<option value="empty">Empty — no planets or extra objects</option>
+								<option value="scarce">Scarce — occasional worlds and objects</option>
+								<option value="normal">Normal — varied, moderate systems</option>
+								<option value="crowded">Crowded — many worlds and objects</option>
+							</select>
+						</div>
+					</div>
+					<p class="generation-advanced-note">System density controls how many of the 80 hexes contain stars. World &amp; orbital content controls planets, surface sites, and non-world survey objects such as stations, mines, ruins, wrecks, and installations. Leave both at Default to keep the existing one-click behavior.</p>
+				</details>
+				<div class="hero-footnote"><span class="mini-check">✓</span> No account. No server. Just you and the void.</div>
+			</div>
+			<div class="hero-art" aria-hidden="true">
+				<div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="orbit orbit-three"></div>
+				<div class="orbit-axis orbit-axis-one"></div><div class="orbit-axis orbit-axis-two"></div>
+				<div class="hero-core"><span>✳</span></div>
+				<span class="orbital-point orbital-point-one"></span><span class="orbital-point orbital-point-two"></span><span class="orbital-point orbital-point-three"></span>
+				<span class="art-label art-label-top">OUTER RIM <i>•</i> 018</span><span class="art-label art-label-bottom">DEEP SPACE / UNMAPPED</span>
+				<span class="art-coordinate">X 04.18<br>Y 07.02</span>
+			</div>
+		</section>
+
+		<section class="creation-grid" aria-label="Sector setup">
+			<div class="section-heading"><div><p class="eyebrow">START YOUR EXPEDITION</p><h2>Choose your launch point</h2></div><span class="section-index">01 <i>/</i> 02</span></div>
+			<div class="launch-card load-card">
+				<div class="launch-icon" aria-hidden="true">↥</div>
+				<div class="launch-copy"><h3>Continue an existing sector</h3><p>Import a previously exported sector JSON file and pick up where you left off.</p><label class="button button-secondary file-button" for="file-input">Load sector file <span aria-hidden="true">↗</span></label><input type="file" id="file-input" accept=".json,.txt,application/json,text/plain"></div>
+				<div class="card-index">IMPORT / 02</div>
+			</div>
+		</section>
+
+		<footer class="app-footer"><span>FAN-MADE TOOL FOR <a href="https://www.sinenomine-pub.com/?page_id=395" target="_blank" rel="noreferrer">STARS WITHOUT NUMBER</a></span><span class="footer-right">BUILT FOR REFEREES <i>✳</i></span></footer>
+	</main>
+
+	<main id="viewer-container" class="hide-section app-shell viewer-shell">
+		<header class="app-topbar">
+			<a class="brand-lockup" href="#" id="home-brand" aria-label="Back to Sector Forge">
+				<span class="brand-mark" aria-hidden="true">✳</span>
+				<span class="brand-copy"><strong>SECTOR<span class="brand-slash">/</span>FORGE</strong><small>STARS WITHOUT NUMBER TOOLKIT</small></span>
+			</a>
+			<div class="topbar-right"><span class="status-dot"></span><span>SECTOR FILE ACTIVE</span><span class="topbar-divider"></span><span class="version-label">GM CONSOLE</span></div>
+		</header>
+
+		<section class="sector-heading-row">
+			<div class="sector-heading-copy"><p class="eyebrow"><span class="eyebrow-line"></span> YOUR CHARTED SPACE</p><div id="sector-name-container" class="sector-name-container"></div><p class="sector-subtitle">Independent worlds. Competing powers. A thousand stories waiting to happen.</p></div>
+			<div class="sector-heading-actions"><span class="live-pill"><span class="status-dot"></span> ACTIVE SECTOR</span><button id="back-button" class="button button-quiet genmode"><span aria-hidden="true">←</span> All sectors</button></div>
+		</section>
+
+		<div id="viewer-tabs" class="viewer-tabs">
+			<section data-title="Export" class="content-panel export-panel">
+				<div class="panel-heading"><div><p class="eyebrow">TRANSFER / ARCHIVE</p><h2>Export &amp; share</h2><p class="panel-description">Save a local copy for safekeeping, or share a compressed link to this exact sector.</p></div><span class="panel-heading-mark" aria-hidden="true">↗</span></div>
+				<div class="export-grid">
+					<article class="export-card"><div class="export-card-icon" aria-hidden="true">▤</div><p class="eyebrow">REFEREE EDITION</p><h3>Full sector archive</h3><p>Includes private notes, hidden details, world tags, and referee-facing information.</p><a id="export-json-gm" class="button button-primary export-link" download>Download GM JSON <span aria-hidden="true">↓</span></a><label class="field-label" for="export-url-gm">Shareable GM link</label><input id="export-url-gm" readonly class="url-export" aria-label="Shareable GM link">
+					</article>
+					<article class="export-card"><div class="export-card-icon" aria-hidden="true">◇</div><p class="eyebrow">PLAYER EDITION</p><h3>Player-safe archive</h3><p>Strips selected secrets and hidden details, ready to share with the table.</p><a id="export-json-player" class="button button-secondary export-link" download>Download player JSON <span aria-hidden="true">↓</span></a><label class="field-label" for="export-url-player">Shareable player link</label><input id="export-url-player" readonly class="url-export" aria-label="Shareable player link">
+					</article>
+				</div>
+				<p class="export-note"><span aria-hidden="true">ⓘ</span> Links contain the sector data in the URL. Large sectors may create long links; JSON is the most reliable backup.</p>
+			</section>
+			<section data-title="Sector Map" id="map-container" class="content-panel map-panel"></section>
+			<section data-title="Worlds" class="content-panel data-panel"><div class="panel-heading"><div><p class="eyebrow">PLANETARY RECORDS</p><h2>World directory</h2><p class="panel-description">Browse and sort the worlds scattered across this sector.</p></div><span class="panel-heading-mark" aria-hidden="true">◎</span></div><div id="worlds-output" class="table-output"></div></section>
+			<section data-title="Corporations" class="content-panel data-panel"><div class="panel-heading"><div><p class="eyebrow">COMMERCE / INDUSTRY</p><h2>Corporations</h2><p class="panel-description">The organizations competing to own tomorrow.</p></div><span class="panel-heading-mark" aria-hidden="true">▥</span></div><div id="corporations-output" class="table-output"></div></section>
+			<section data-title="Political Groups" class="content-panel data-panel"><div class="panel-heading"><div><p class="eyebrow">POWER / INFLUENCE</p><h2>Political groups</h2><p class="panel-description">Movements, coalitions, and powers with a stake in the sector.</p></div><span class="panel-heading-mark" aria-hidden="true">⌘</span></div><div id="political-groups-output" class="table-output"></div></section>
+			<section data-title="Religions" class="content-panel data-panel"><div class="panel-heading"><div><p class="eyebrow">BELIEF / IDEOLOGY</p><h2>Religions &amp; faiths</h2><p class="panel-description">Creeds that shape worlds—and the people willing to die for them.</p></div><span class="panel-heading-mark" aria-hidden="true">✧</span></div><div id="religions-output" class="table-output"></div></section>
+			<section data-title="Aliens" class="content-panel data-panel"><div class="panel-heading"><div><p class="eyebrow">NON-HUMAN INTELLIGENCE</p><h2>Alien catalog</h2><p class="panel-description">Unfamiliar life, strange societies, and first-contact complications.</p></div><span class="panel-heading-mark" aria-hidden="true">⌁</span></div><div id="aliens-output" class="table-output"></div></section>
+			<section data-title="Factions" class="content-panel data-panel campaign-panel">
+				<div class="panel-heading"><div><p class="eyebrow">SECTOR POWER / DOWNTIME</p><h2>Faction operations</h2><p class="panel-description">Track influential organizations, their resources, goals, assets, and the pressure they exert across the sector.</p></div><span class="panel-heading-mark" aria-hidden="true">♜</span></div>
+				<div class="tool-actions"><button id="factions-reroll" class="button button-secondary" type="button">Regenerate factions</button><button id="faction-turn-button" class="button button-primary" type="button">Advance faction turn ↗</button><span id="faction-turn-status" class="tool-status"></span></div>
+				<div id="faction-news" class="story-grid"></div><div id="factions-output" class="table-output"></div>
+				<div class="panel-subsection"><h3>Diplomatic relations</h3><p class="panel-description">Bilateral relationships shift with turns and can be adjusted directly; they feed conflict pressure and market stability.</p><div id="diplomacy-output" class="table-output"></div></div>
+				<div class="panel-subsection"><h3>Faction asset roster</h3><p class="panel-description">Review and edit individual assets, upkeep, hit points, deployment, and readiness.</p><div id="assets-output" class="table-output"></div></div>
+				<p class="tool-footnote">Faction turns track income, upkeep, maintenance, asset purchases, influence, repair, and attack events using Sector Forge’s original generic asset catalog. This is a playable campaign aid, not a verbatim reproduction of the full published faction asset catalog and all special asset abilities.</p>
+			</section>
+			<section data-title="Trade & Routes" class="content-panel data-panel campaign-panel">
+				<div class="panel-heading"><div><p class="eyebrow">TRADE LANES / POLITIES / MARKETS</p><h2>Sector connections</h2><p class="panel-description">Map reachable neighbors, outline political blocs, and compare original local commodity markets.</p></div><span class="panel-heading-mark" aria-hidden="true">⇄</span></div>
+				<div class="tool-actions"><button id="routes-reroll" class="button button-secondary" type="button">Recalculate routes</button><button id="markets-reroll" class="button button-secondary" type="button">Reroll markets</button><span id="route-status" class="tool-status"></span></div>
+				<div class="panel-subsection"><h3>Political blocs</h3><div id="polities-output" class="story-grid"></div></div>
+				<div class="panel-subsection"><h3>Trade & scout routes</h3><div id="routes-output" class="table-output"></div></div>
+				<div class="panel-subsection"><h3>Territorial influence</h3><p class="panel-description">Control is recalculated from home systems and deployed assets. A referee override can settle contested borders.</p><div id="influence-output" class="table-output"></div></div>
+				<div class="panel-subsection"><h3>World markets</h3><p class="panel-description">Prices are creative local estimates for campaign play, not a literal transcription of Suns of Gold tables.</p><div id="markets-output" class="market-grid"></div></div>
+				<div class="panel-subsection"><h3>Corporate market links</h3><p class="panel-description">These are live links between corporations, specific worlds, market goods, and the systems that carry the trade.</p><div id="corp-market-links-output" class="table-output"></div></div>
+			</section>
+			<section data-title="Adventure Lab" class="content-panel data-panel campaign-panel">
+				<div class="panel-heading"><div><p class="eyebrow">FRIENDS / ENEMIES / COMPLICATIONS</p><h2>Adventure seed forge</h2><p class="panel-description">Turn existing world tags into playable starting situations with patrons, opposition, complications, locations, stakes, and rewards.</p></div><span class="panel-heading-mark" aria-hidden="true">✦</span></div>
+				<div class="tool-actions"><button id="adventures-reroll" class="button button-primary" type="button">Generate new adventure seeds ↗</button><span id="adventure-status" class="tool-status"></span></div>
+				<div id="adventures-output" class="story-grid adventure-grid"></div>
+			</section>
+			<section data-title="Frontier Lab" class="content-panel data-panel campaign-panel">
+				<div class="panel-heading"><div><p class="eyebrow">OPTIONAL CAMPAIGN MODULES</p><h2>Supplement toolkit</h2><p class="panel-description">Generate original campaign material for espionage, commerce, military operations, navies, cyberpunk, frontier outposts, ruins, relics, alien mysteries, and more.</p></div><span class="panel-heading-mark" aria-hidden="true">⌘</span></div>
+				<div class="supplement-form">
+					<label for="supplement-module">Choose a toolkit</label><select id="supplement-module">
+						<option value="espionage">Darkness Visible — espionage & conspiracies</option><option value="merchant">Suns of Gold — merchant opportunity</option><option value="military">Starvation Cheap — military campaign</option><option value="naval">Skyward Steel — naval operation</option><option value="vehicle">Engines of Babylon — vehicle design brief</option><option value="cyberpunk">Polychrome — cyberpunk situation</option><option value="sorcery">Codex of the Black Sun — weird science / sorcery prompt</option><option value="outpost">Distant Lights — frontier outpost</option><option value="ruin">Dead Names — lost site / forgotten ruin</option><option value="relic">Relics of the Lost — pretech relic</option><option value="site">Sixteen Stars / Hard Light — perilous adventure site</option><option value="person">Patron / nemesis dossier</option><option value="character">Character Options — character concept</option>
+					</select>
+					<label for="supplement-target">Anchor to a world or system</label><select id="supplement-target"><option value="">Random suitable location</option></select>
+					<button id="supplement-generate" class="button button-primary" type="button">Generate campaign material ↗</button>
+				</div>
+				<p class="tool-footnote">These are system-neutral, original prompts based on the campaign needs signaled by each book. They are not a page-by-page implementation of each supplement’s proprietary tables or mechanics. Character and patron outputs are original concept dossiers, not complete rules-legal character sheets; use the books to assign exact attributes, skills, foci, and other mechanics.</p>
+				<div id="supplement-output" class="story-grid"></div>
+			</section>
+			<section data-title="Threats & People" class="content-panel data-panel campaign-panel">
+				<div class="panel-heading"><div><p class="eyebrow">XENOBESTIARY / NPC FIELD NOTES</p><h2>Threats and people of interest</h2><p class="panel-description">Create useful stat scaffolds for hostile humans, robots/VIs, xenobeasts, patrons, and recurring nemeses.</p></div><span class="panel-heading-mark" aria-hidden="true">⚑</span></div>
+				<div class="tool-actions"><button id="threats-reroll" class="button button-secondary" type="button">Generate threats</button><button id="people-reroll" class="button button-secondary" type="button">Generate people</button><span id="threat-status" class="tool-status"></span></div>
+				<div class="panel-subsection"><h3>Threat roster</h3><div id="threats-output" class="table-output"></div></div>
+				<div class="panel-subsection"><h3>People of interest</h3><div id="people-output" class="story-grid"></div></div>
+			</section>
+		</div>
+		<footer class="app-footer viewer-footer"><span>SECTOR/FORGE <i>✳</i> CAMPAIGN CARTOGRAPHY</span><span class="footer-right">LOCAL DATA · YOUR TABLE · YOUR UNIVERSE</span></footer>
+	</main>
+
+	<script src="lzstring.min.js"></script>
+	<script src="url-param.js"></script>
+	<script src="dynmodal.js"></script>
+	<script src="dynedit.js"></script>
+	<script src="dyntable.js"></script>
+	<script src="dyntab.js"></script>
+	<script src="dynspoiler.js"></script>
+	<script src="textload.js"></script>
+	<script src="generators/genutil.js"></script>
+	<script src="generators/namegen.js"></script>
+	<script src="generators/swnnamegen.js"></script>
+	<script src="generators/buzzword_generator.js"></script>
+	<script src="generators/world-terrain-generator.js"></script>
+	<script src="generators/star-system-generator.js"></script>
+	<script src="generators/world-generator.js"></script>
+	<script src="generators/corporation-generator.js"></script>
+	<script src="generators/religion-generator.js"></script>
+	<script src="generators/political-group-generator.js"></script>
+	<script src="generators/alien-generator.js"></script>
+	<script src="generators/campaign-tools.js"></script>
+	<script src="hexmap.js"></script>
+	<script src="app.js"></script>
+	<script>App.start();</script>
+</body>
+</html>
