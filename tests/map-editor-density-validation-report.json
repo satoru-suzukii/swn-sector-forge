@@ -1,0 +1,231 @@
+{
+  "project": "Sector Forge 2.5 \u2014 Advanced Generation Density and Full Hex-System Editor",
+  "validation_date": "2026-10-26",
+  "overall": "PASS",
+  "implementation": [
+    "Advanced generation options are collapsed by default; one-click generation continues to use the legacy default settings.",
+    "System density presets: Default (legacy 21\u201330), Empty (0), Scarce (8\u201314), Normal (31\u201340), Crowded (45\u201365).",
+    "World & orbital content density independently controls planets, points of interest, and non-star survey installations.",
+    "Edit Mode allows creating a system on an empty hex and editing its planets, arbitrary orbital survey objects, and points of interest.",
+    "New planets receive stable IDs, a matching survey row, a market, and a world-directory record.",
+    "Modal stack hardening prevents a stale or detached modal from inadvertently clearing the live stack."
+  ],
+  "javascript_syntax_checks": {
+    "result": "PASS",
+    "scope": "All JavaScript source and test files"
+  },
+  "generator_and_campaign_audit": {
+    "stressRuns": 2000,
+    "crashes": 0,
+    "expandedStressRuns": 500,
+    "expandedCrashes": 0,
+    "expandedMissingEstimate": 0,
+    "expandedInvalidTech": 0,
+    "legacyMigrationFailures": 0,
+    "playerMigrationLeaks": 0,
+    "factionSimulationSectors": 15,
+    "factionTurnsPerSector": 12,
+    "factionTurnCrashes": 0,
+    "factionTurnEvents": 1229,
+    "factionBadAssets": 0,
+    "factionBadCredits": 0,
+    "averageSystems": 25.49,
+    "averagePlanets": 33.4,
+    "duplicateCoords": 0,
+    "emptySystems": 0,
+    "duplicateTagPairs": 0,
+    "missingBodies": 0,
+    "missingTerrain": 0,
+    "missingDescriptions": 0,
+    "invalidPopulation": 0,
+    "missingIds": 0,
+    "routesOver3Hexes": 0,
+    "danglingRoutes": 0,
+    "marketsMissingWorld": 0,
+    "badDiplomacyRefs": 0,
+    "badInfluenceRefs": 0,
+    "badCorporateLinks": 0,
+    "badMarketRouteLinks": 0,
+    "incompleteAdventureBatches": 0,
+    "incompleteFactionBatches": 0,
+    "incompleteThreatBatches": 0,
+    "incompletePeopleBatches": 0,
+    "supplementToolFailures": 0,
+    "worldTagCount": 100,
+    "poiTableCount": 9,
+    "densityAudit": {
+      "systemCounts": {
+        "empty": 0,
+        "scarce": 13,
+        "normal": 32,
+        "crowded": 59
+      },
+      "worldCounts": {
+        "empty": {
+          "systems": 13,
+          "planets": 0,
+          "poi": 0,
+          "extras": 0
+        },
+        "scarce": {
+          "systems": 9,
+          "planets": 4,
+          "poi": 2,
+          "extras": 8
+        },
+        "normal": {
+          "systems": 14,
+          "planets": 29,
+          "poi": 18,
+          "extras": 58
+        },
+        "crowded": {
+          "systems": 8,
+          "planets": 26,
+          "poi": 35,
+          "extras": 81
+        }
+      },
+      "emptySectorEnriched": true,
+      "failures": []
+    },
+    "overall": "PASS",
+    "failures": []
+  },
+  "chromium_end_to_end": {
+    "result": "PASS",
+    "runs": 1,
+    "test_groups": 10,
+    "baseline": {
+      "systems": 29,
+      "markets": 36,
+      "assets": 32,
+      "svg": 80,
+      "allSvg": true,
+      "marketCards": 36
+    },
+    "density_report": {
+      "advancedInitiallyCollapsed": true,
+      "defaultSystems": 28,
+      "emptySystems": 0,
+      "systemPresets": {
+        "scarce": 11,
+        "normal": 35,
+        "crowded": 63
+      },
+      "worldProfiles": {
+        "empty": {
+          "systems": 13,
+          "worlds": 0,
+          "sites": 0,
+          "orbitalObjects": 0
+        },
+        "scarce": {
+          "systems": 11,
+          "worlds": 6,
+          "sites": 3,
+          "orbitalObjects": 13
+        },
+        "normal": {
+          "systems": 8,
+          "worlds": 13,
+          "sites": 11,
+          "orbitalObjects": 31
+        },
+        "crowded": {
+          "systems": 11,
+          "worlds": 36,
+          "sites": 51,
+          "orbitalObjects": 93
+        }
+      },
+      "selectorsRestored": true
+    },
+    "editor": {
+      "createdSystem": {
+        "id": "SYS-30",
+        "x": 0,
+        "y": 1,
+        "planets": 0,
+        "bodies": 2,
+        "selected": true
+      },
+      "createdWorld": {
+        "worlds": 1,
+        "worldId": "SYS-30-W01",
+        "market": true,
+        "surveyLink": true,
+        "worldDirectory": true,
+        "validRoutes": true
+      },
+      "customBody": {
+        "exists": true,
+        "bodies": [
+          {
+            "type": "Primary star (yellow dwarf)",
+            "name": " A",
+            "bodyClass": "S"
+          },
+          {
+            "type": "Companion star (blue giant)",
+            "name": " B",
+            "bodyClass": "S"
+          },
+          {
+            "type": "Mining platform",
+            "name": "Morrow Mine",
+            "bodyClass": "N",
+            "isGeneratedWorld": false
+          }
+        ],
+        "survey": true,
+        "modalCount": 0,
+        "modalText": [],
+        "modalStack": 0,
+        "inspector": "Menk System\n(0001)\n\nedit | delete | add planet | add survey object | add point of interest\n\nSystem Survey\nAdd object\n|\nReroll survey\n\nPrimary star (yellow dwarf)\tMenk A\nCompanion star (blue giant)\tMenk B\nMining platform\tMenkMorrow Mine\nedit | delete"
+      },
+      "customPoi": true
+    },
+    "market_layout": {
+      "visible": true,
+      "cardCount": 36,
+      "contained": true
+    },
+    "campaign_simulation": {
+      "turn": 1,
+      "marketTurn": 1,
+      "hasInfluence": true,
+      "hasMarketPrices": true,
+      "territoryRows": 29
+    },
+    "browser_console_errors": 0,
+    "coverage": [
+      "Default one-click generation and collapsed advanced options",
+      "Empty/Scarce/Normal/Crowded system density presets",
+      "Empty/Scarce/Normal/Crowded world and orbital content presets",
+      "Valid zero-system sector",
+      "Faction domination display toggle and neutral-map restoration",
+      "Map edit toggle and hidden editing controls in browse mode",
+      "Create system in an empty hex",
+      "Add custom orbital installation (mining platform)",
+      "Add custom POI (ancient ruins)",
+      "Add planet with ID, survey row, market, world-directory linkage, and valid routes",
+      "System survey responsiveness at four viewport widths",
+      "System move/region edit, diplomacy, factions, markets, and player-safe export"
+    ],
+    "passed_e2e_log_lines": [
+      "E2E map state {\"sector\":true,\"hexes\":80,\"viewer\":\"app-shell viewer-shell\"}",
+      "PASS: safe default browse mode and independent faction-domination color toggle.",
+      "PASS: sector generation and SVG map (29 systems, 36 markets, 32 assets).",
+      "PASS: linked system/world/market/route/corporation IDs (44 corporate-market links).",
+      "PASS: advanced system/world density presets ({\"scarce\":11,\"normal\":35,\"crowded\":63}) and valid zero-system sectors.",
+      "PASS: System Survey for 29 systems at four viewport widths (116 render checks), long-token overflow stress, valid POI table structure, and reroll action.",
+      "PASS: mobile touch-action policy, deterministic document scrolling, and fixed map/system geometry.",
+      "PASS: fixed viewport, inert drag gestures, normal page scrolling, explicit select-then-move editing, responsive containment, and region editor.",
+      "PASS: Markets layout at 1024px/820px/1440px, nested-table scrolling, linked navigation, and market reroll.",
+      "PASS: asset deployment/readiness, territorial override, diplomacy editing, faction turns, influence, and market repricing.",
+      "PASS: map editor safe visibility, empty-hex system creation, custom orbital object/site creation, and planet/market/survey linkage.",
+      "PASS: player-safe export filtering and zero uncaught browser JavaScript errors."
+    ]
+  }
+}

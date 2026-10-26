@@ -1,0 +1,146 @@
+{
+  "project": "Sector Forge 1.0 \u2014 GitHub-ready package with favicon integration",
+  "validation_date": "2026-10-27",
+  "overall": "PASS",
+  "scope": "Validation of the exact project tree packaged for this release. The app code was preserved; changes are limited to favicon assets/references and release documentation/reporting.",
+  "favicon_assets": {
+    "svg_master": {
+      "file": "favicon.svg",
+      "result": "PASS",
+      "description": "Square 64 \u00d7 64 SVG vector favicon with navy background, cyan orbital hexagon, and red central star."
+    },
+    "png_icons": {
+      "favicon-16x16.png": {
+        "result": "PASS",
+        "dimensions_px": [
+          16,
+          16
+        ]
+      },
+      "favicon-32x32.png": {
+        "result": "PASS",
+        "dimensions_px": [
+          32,
+          32
+        ]
+      },
+      "favicon-192x192.png": {
+        "result": "PASS",
+        "dimensions_px": [
+          192,
+          192
+        ]
+      },
+      "favicon-512x512.png": {
+        "result": "PASS",
+        "dimensions_px": [
+          512,
+          512
+        ]
+      },
+      "apple-touch-icon.png": {
+        "result": "PASS",
+        "dimensions_px": [
+          180,
+          180
+        ]
+      }
+    },
+    "ico_fallback": {
+      "file": "favicon.ico",
+      "result": "PASS",
+      "format": "ICO",
+      "resolutions": [
+        "16x16",
+        "32x32",
+        "48x48"
+      ]
+    },
+    "index_html_links": {
+      "result": "PASS",
+      "paths_relative": true,
+      "entries": [
+        "./favicon.svg",
+        "./favicon-32x32.png",
+        "./favicon-16x16.png",
+        "./favicon.ico",
+        "./apple-touch-icon.png"
+      ]
+    }
+  },
+  "static_integrity": {
+    "html_local_reference_check": {
+      "result": "PASS",
+      "local_reference_count": 28,
+      "missing_references": []
+    },
+    "github_pages_project_subpath_resolution": {
+      "result": "PASS",
+      "base_url": "https://example.github.io/sector-forge/",
+      "http_smoke_test": "PASS",
+      "http_200_endpoints": [
+        "index.html",
+        "favicon.svg",
+        "favicon-16x16.png",
+        "favicon-32x32.png",
+        "favicon-192x192.png",
+        "favicon-512x512.png",
+        "favicon.ico",
+        "apple-touch-icon.png"
+      ],
+      "note": "All favicon links resolve within a simulated repository project path; the index and all favicon assets returned HTTP 200."
+    },
+    "javascript_syntax": {
+      "result": "PASS",
+      "files_checked": 24,
+      "extensions": [
+        ".js",
+        ".cjs"
+      ]
+    },
+    "zip_integrity": {
+      "result": "PASS",
+      "archive_entries": 75,
+      "root_layout": "PASS",
+      "required_files_present": "PASS",
+      "extractable": "PASS",
+      "note": "The packaged ZIP was tested, extracted, and its application audit and Chromium end-to-end suite were run from the extracted copy."
+    }
+  },
+  "generator_campaign_audit": {
+    "result": "PASS",
+    "core_generation_runs": 10000,
+    "core_generation_crashes": 0,
+    "expanded_generation_runs": 3000,
+    "expanded_generation_crashes": 0,
+    "faction_simulation_sectors": 60,
+    "faction_turns_per_sector": 12,
+    "faction_turn_crashes": 0,
+    "faction_turn_events": 4945,
+    "failures": []
+  },
+  "chromium_end_to_end": {
+    "result": "PASS",
+    "runs": 4,
+    "passed_runs": 4,
+    "test_groups_per_run": 10,
+    "browser": "Chromium",
+    "mode": "Offline-inline mode (E2E_INLINE=1); three runs from the staging tree and one run from the exact downloadable ZIP after extraction",
+    "uncaught_browser_errors_per_run": 0,
+    "coverage": [
+      "sector generation and SVG map bounds",
+      "linked systems, worlds, markets, trade routes, and corporate records",
+      "density presets and valid zero-system sectors",
+      "system survey rendering, overflow handling, and rerolls at multiple viewport widths",
+      "mobile touch behavior and normal page scrolling",
+      "map editor controls, explicit movement, and region editing",
+      "market layout and linked navigation",
+      "faction assets, diplomacy, influence, turns, and market repricing",
+      "empty-hex system creation and world/orbital/point-of-interest editing",
+      "player-safe export filtering"
+    ],
+    "environment_note": "Direct localhost browser navigation was blocked by the execution environment, so the documented offline-inline test mode was used. Four randomized Chromium runs passed, including a final run from an extracted copy of the downloadable ZIP. This mode runs the same app HTML/CSS/JavaScript and local text data but does not exercise favicon rendering in a browser; favicon files, formats, dimensions, relative paths, and HTTP availability were tested separately.",
+    "failures": []
+  },
+  "deployment_note": "No live GitHub Pages deployment was performed from this environment. After publishing, perform a final smoke check on the actual Pages URL, including the favicon in the browser tab."
+}
