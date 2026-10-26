@@ -248,9 +248,6 @@ Sector Forge is a **campaign-generation and referee-support tool**, not an offic
 - Frontier toolkits create original prompts inspired by common campaign themes. Character outputs are concept dossiers, not full, rules-legal character sheets.
 - Generated results are prompts for play. Referees should review, adjust, and adjudicate them for their campaign.
 
-## License and attribution
-
-**No `LICENSE` file is currently included with this project.** Before inviting reuse or contributions, choose and add a license that reflects how you want the original Sector Forge code and original material to be used. Until a license is provided, visitors should not assume the repository grants permission to reuse, modify, or redistribute its contents.
 
 *Stars Without Number* is a role-playing game published by Sine Nomine Publishing. Sector Forge is an unofficial fan-made project and does not claim ownership of the game, its setting, or any third-party material. This README is not a statement that the project is endorsed by the game's publisher. See the [official product page](https://sine-nomine-publishing.myshopify.com/products/stars-without-number-revised).
 
