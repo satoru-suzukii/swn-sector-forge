@@ -249,9 +249,18 @@ Sector Forge is a **campaign-generation and referee-support tool**, not an offic
 - Generated results are prompts for play. Referees should review, adjust, and adjudicate them for their campaign.
 
 
+## License and attribution
+
+### Inspiration and acknowledgment
+
+Big thanks to [hamhambone's SWN Sector Generator](https://hamhambone.github.io/swn/). It was a great source of inspiration and a reference during the development of Sector Forge. It was helpful to me while exploring approaches to generating and presenting a *Stars Without Number* sector.
 
 
+### Sector Forge license
 
+The Sector Forge source code is released under the [MIT License](LICENSE). See the `LICENSE` file for the full license text.
+
+### Stars Without Number
 
 *Stars Without Number* is a role-playing game published by Sine Nomine Publishing. Sector Forge is an unofficial fan-made project and does not claim ownership of the game, its setting, or any third-party material. This README is not a statement that the project is endorsed by the game's publisher. See the [official product page](https://sine-nomine-publishing.myshopify.com/products/stars-without-number-revised).
 
