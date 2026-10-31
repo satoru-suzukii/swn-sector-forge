@@ -441,7 +441,7 @@ input::placeholder, textarea::placeholder { color: var(--text-dim); }
 .map-region-tools label { color:var(--text-dim); font:500 9px var(--font-mono); letter-spacing:.08em; text-transform:uppercase; }
 .map-region-tools select,.map-region-tools input { width:100%; min-width:0; min-height:32px; padding:7px 9px; color:var(--text-color); border:1px solid var(--line-strong); border-radius:6px; outline-offset:2px; background:var(--surface-0); font-size:11px; }
 .map-canvas-scroll { display:flex; justify-content:center; align-items:flex-start; width:100%; min-width:0; max-width:100%; padding:12px; overflow:visible; overscroll-behavior:auto; }
-#hexmap.hexmap-svg { display:block; width:min(100%, 650px); min-width:0; height:auto; max-width:100%; flex:0 1 650px; aspect-ratio:530 / 745; overflow:hidden; border:1px solid rgba(107,145,176,.18); border-radius:7px; touch-action:auto !important; user-select:none; overscroll-behavior:auto; cursor:default; }
+#hexmap.hexmap-svg { display:block; width:min(100%, 650px); min-width:0; height:auto; max-width:100%; flex:0 1 650px; aspect-ratio:640 / 880; overflow:hidden; border:1px solid rgba(107,145,176,.18); border-radius:7px; touch-action:auto !important; user-select:none; overscroll-behavior:auto; cursor:default; }
 /* Keep native touch scrolling enabled even when the gesture starts on an SVG child.
    The map has no pointer-drag/pan handlers, so the browser must own touch gestures. */
 .map-visual, .map-canvas-scroll, #hexmap.hexmap-svg, #hexmap.hexmap-svg * { touch-action:auto !important; }
@@ -504,7 +504,7 @@ input::placeholder, textarea::placeholder { color: var(--text-dim); }
   .map-region-tools { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
   .map-region-tools label { grid-column:1/-1; }
   .map-region-tools select,.map-region-tools input { grid-column:1/-1; }
-  #hexmap.hexmap-svg { width:min(100%,530px); }
+  #hexmap.hexmap-svg { width:min(100%,640px); }
   .market-grid { grid-template-columns:minmax(0,1fr); }
   .market-card { padding:12px; }
 }
@@ -541,10 +541,17 @@ input::placeholder, textarea::placeholder { color: var(--text-dim); }
 #inspector .system-survey-table tr { border-top:1px solid rgba(157,183,208,.11); }
 #inspector .system-survey-table tr:first-child { border-top:0; }
 #inspector .system-survey-table td { box-sizing:border-box; min-width:0; max-width:100%; padding:7px 5px; vertical-align:top; white-space:normal; overflow-wrap:anywhere; word-break:normal; hyphens:auto; line-height:1.45; }
-#inspector .system-survey-table td.system-survey-type { width:48%; padding-left:0; padding-right:10px; color:var(--text-dim); white-space:normal; overflow-wrap:anywhere; }
-#inspector .system-survey-table td.system-survey-name { width:52%; padding-right:0; color:var(--text-color); overflow-wrap:anywhere; }
+#inspector .system-survey-table td.system-survey-type { width:24%; padding-left:0; padding-right:8px; color:var(--text-dim); white-space:normal; overflow-wrap:anywhere; }
+#inspector .system-survey-table td.system-survey-name { width:25%; padding-right:8px; color:var(--text-color); overflow-wrap:anywhere; }
+#inspector .system-survey-table td.system-survey-details { width:51%; padding-right:0; color:var(--text-dim); font-size:.92em; overflow-wrap:anywhere; }
 #inspector .inspector-poi-body { min-width:0; max-width:100%; }
 #inspector .inspector-poi-table { width:100%; max-width:100%; table-layout:fixed; border-collapse:collapse; }
 #inspector .inspector-poi-table td { white-space:normal; overflow-wrap:anywhere; line-height:1.45; }
 #inspector .inspector-poi-table td:first-child { width:36%; padding-right:9px; white-space:normal; }
 #inspector .system-survey .textbutton { display:inline-block; padding:2px 0; }
+
+/* Import controls are intentionally simple and visible before any file is loaded. */
+.swn-import-mode { display:block; width:100%; max-width:100%; margin:7px 0 5px; }
+.import-mode-help { color:var(--text-dim); font-size:12px; line-height:1.5; margin:4px 0 12px; }
+#source-data-output { max-height:70vh; overflow:auto; }
+#source-data-summary { margin:10px 0 16px; line-height:1.6; }

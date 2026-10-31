@@ -16,13 +16,15 @@ Sector Forge is designed for referees who want a sector that is more than a map:
 - [Project structure](#project-structure)
 - [Running the tests](#running-the-tests)
 - [Scope and limitations](#scope-and-limitations)
+- [SWN import compatibility status](#swn-import-compatibility-status)
 - [License and attribution](#license-and-attribution)
 - [Feedback](#feedback)
 
 ## Highlights
 
 - **Runs in a browser.** No account, application server, framework, package install, or build step is required to use the app.
-- **Generate an 8 × 10 sector.** The standard system-density setting generates 21–30 occupied hexes by default, with optional presets for emptier or busier regions.
+- **Import Sectors Without Number exports.** Load native JSON exports or entity CSV files; choose whether to preserve missing details as blank or let Sector Forge fill supported missing facility occupation/situation fields. Imported survey objects show their occupation, situation, descriptions, and parent; empty source records are identified rather than silently fabricated. Original source records are retained in the GM archive, supported route paths are drawn on the map, and supported layer regions are converted.
+- **Generate a 10 × 12 sector.** The standard system-density setting generates 21–30 occupied hexes by default, with optional presets for emptier or busier regions.
 - **Edit the map and systems.** Create a system in an empty hex, move systems through explicit controls, and add or edit planets, orbital objects, and points of interest.
 - **Connect your campaign data.** Worlds, system surveys, markets, corporate relationships, routes, and faction influence use linked records.
 - **Simulate faction activity.** Advance faction turns to resolve events such as income, upkeep, asset operations, repairs, attacks, purchases, and expansion.
@@ -35,9 +37,9 @@ Sector Forge is designed for referees who want a sector that is more than a map:
 
 ### Sector and world generation
 
-- Generates star systems across an 80-hex sector map.
+- Generates star systems across a 120-hex sector map.
 - Offers **Revised Edition core** and **Expanded World Generation** profiles.
-- Creates world records with tags, terrain, descriptions, population-related details, and linked system survey entries.
+- Creates world records with tags, terrain, descriptions, population-related details, and linked system survey entries. Generated gravity is population-aware: standard gravity is the norm, while unusual gravity is reserved for sparsely populated worlds.
 - Generates stellar survey objects, planets, points of interest, and additional orbital installations.
 - Supports system-density and world/orbital-content-density controls independently.
 - Keeps advanced options collapsed by default, so the standard one-click generation flow retains its default behavior.
@@ -58,7 +60,7 @@ The separate **World & orbital content** setting controls how many planets, surf
 
 ### Interactive sector map
 
-- Displays the sector as a crisp SVG hex map with 80 selectable hexes.
+- Displays the sector as a crisp SVG hex map with 120 selectable hexes.
 - Starts with **Edit mode OFF**, keeping editing controls hidden until they are deliberately enabled.
 - Lets you select a system, choose **Move selected system**, and then choose an empty destination hex.
 - Allows a system to be created in an empty hex while edit mode is enabled.
@@ -68,7 +70,19 @@ The separate **World & orbital content** setting controls how many planets, surf
 
 The map intentionally uses a fixed viewport rather than drag-to-pan or wheel zoom. Select-and-act controls are used for moving systems to avoid accidental map movement and to keep page scrolling predictable on touch devices.
 
-### Campaign workspaces
+#### Importing a Sectors Without Number sector
+
+From the launch screen, choose an import mode and select the source JSON export or an entity CSV export from **Sectors Without Number**.
+
+- **Import as-is · leave missing details blank** is the default. It does not generate missing facility occupations, situations, or imported-world gravity. Existing source records remain available in the **Source Data** workspace and in the GM JSON archive.
+- **Import and generate missing details** explicitly opts into filling blank occupation/situation fields for supported SWN facility types (research bases, moon bases, stations, mines, asteroid bases/belts, and orbital ruins). It also generates gravity for imported worlds that do not have a gravity value. Existing imported fields are never overwritten. Generated details are marked as Forge-filled, and the raw source JSON remains unchanged. Some SWN entities, such as moons, intentionally have no occupation/situation table and remain without invented details.
+- **Native JSON is preferred.** The importer normalizes SWN's one-based entity x/y coordinates to Forge's zero-based grid coordinates. Route and layer hex keys are already zero-based and are handled separately. Physical source entities such as moons, bases, stations and ruins are also listed in the system survey when supported.
+- **CSV is a best-effort fallback.** CSV entity exports do not provide the same stable ID and relationship data as JSON, so parent links may need to be inferred from names and locations. If a parent cannot be resolved confidently, the original record is preserved in Source Data instead of being discarded.
+- **Source-specific data is retained.** Supported navigation route paths are drawn over the map, supported layer regions are mapped into Forge's region model, and source factions are listed for reference. The complete source JSON payload remains in the GM archive. Source faction data is not silently converted into Forge's different faction-turn model.
+
+See [SWN import compatibility status](FEATURE_PARITY.md) for the specific coverage and limitations. The native JSON path is regression-tested against the supplied Acheron Rho export from October 30, 2026, as well as synthetic edge cases.
+
+## Campaign workspaces
 
 | Workspace | What it helps you do |
 | --- | --- |
@@ -131,8 +145,8 @@ Keep the relative file structure intact when uploading. The HTML references scri
 
 A typical workflow looks like this:
 
-1. **Generate a sector** using the default or expanded world-generation profile.
-2. **Adjust the density** if you want an unusually quiet, sparse, normal, or crowded region.
+1. **Generate a sector** using the default or expanded world-generation profile, or import a Sectors Without Number export using the import workflow above.
+2. **Adjust the density** if you are generating a new sector and want an unusually quiet, sparse, normal, or crowded region.
 3. **Explore the map** and open systems to inspect their surveys and linked worlds.
 4. **Enable Edit mode** only when you're ready to create or modify map content.
 5. **Build campaign actors** such as factions, corporations, faiths, and political groups.
@@ -149,9 +163,9 @@ Sector Forge does not send your sector to a Sector Forge server. The active sect
 The **Export & Share** screen provides two export paths:
 
 - **GM JSON / GM link:** includes referee-facing information and hidden details.
-- **Player JSON / player link:** removes selected secret fields and rebuilds some descriptions to hide tag names.
+- **Player JSON / player link:** removes selected secret fields, rebuilds some descriptions to hide tag names, retains visible imported SWN survey entities, and excludes hidden entities plus their descendants.
 
-**Review player-safe exports before sharing them.** The player export is a practical filtering tool, not a formal security boundary; do not rely on it to protect information that must remain secret. Keep the GM export private, and share only the player version you have checked.
+**Review player-safe exports before sharing them.** Imported SWN `isHidden` flags are applied to systems, planets, facilities, and nested descendants, but the player export is still a practical filtering tool rather than a formal security boundary. Keep the GM export private, and share only the player version you have checked.
 
 To resume a sector later, load its exported JSON file or open its share URL. Keep a separate backup if the sector matters to an ongoing campaign.
 
@@ -163,6 +177,8 @@ To resume a sector later, load its exported JSON file or open its share URL. Kee
 ├── planet.css                         # Application styling and responsive layout
 ├── app.js                             # Sector state, UI logic, and campaign integration
 ├── hexmap.js                          # SVG hex map and map editing behavior
+├── sector-grid.js                     # Shared grid dimensions, coordinate checks and viewport sizing
+├── swn-import.js                      # Sectors Without Number JSON/CSV import adapter
 ├── url-param.js                       # URL parameter support
 ├── lzstring.min.js                    # URL-safe compression for sector links
 ├── dynmodal.js                        # Modal dialog behavior
@@ -184,9 +200,12 @@ To resume a sector later, load its exported JSON file or open its share URL. Kee
 │   ├── world-terrain-generator.js     # Terrain generation
 │   ├── campaign-tools.js              # Campaign toolkits and prompts
 │   └── data/                          # Text tables and naming data
+├── FEATURE_PARITY.md                  # SWN importer coverage and known gaps
 ├── tests/
 │   ├── run-audit.cjs                  # Generator and data-integrity audit
 │   ├── e2e.cjs                        # Chromium browser end-to-end suite
+│   ├── import-validation.cjs          # CSV/native JSON import checks
+│   ├── fixtures/                      # The three supplied SWN CSV regression exports
 │   ├── *-validation-report.json        # Recorded validation reports
 │   └── release-validation-report.json  # This packaged 1.0 release check
 ├── CHANGELOG.md                       # Development history
@@ -209,7 +228,7 @@ From the repository root, run:
 node tests/run-audit.cjs
 ```
 
-The default audit exercises core and expanded generation, data relationships, routes, markets, faction turns, and campaign-tool output. To increase the workload, use environment variables such as:
+The default audit exercises core and expanded generation, data relationships, routes, markets, faction turns, and campaign-tool output. Run `node tests/import-validation.cjs` to validate all three supplied CSV exports and the native JSON fixture. To increase the workload, use environment variables such as:
 
 ```bash
 SWN_CORE_RUNS=10000 SWN_EXPANDED_RUNS=3000 SWN_FACTION_SECTORS=60 node tests/run-audit.cjs
@@ -235,7 +254,7 @@ An offline-inline mode is also available for environments where the test browser
 E2E_INLINE=1 node tests/e2e.cjs
 ```
 
-The JSON reports document validation runs performed during development. The current packaged files are covered by [`tests/release-validation-report.json`](tests/release-validation-report.json), including favicon/file-reference checks, a high-volume generator/faction audit, syntax checks, and repeated Chromium end-to-end runs. Run the commands above against the commit you intend to publish if you need to refresh the result for a later revision.
+The JSON reports document validation runs performed during development. [`tests/release-validation-report.json`](tests/release-validation-report.json) records the checks run for this updated snapshot, including grid and import coverage, a generator/faction audit, JavaScript syntax checks, local-reference checks, and the Chromium end-to-end suite. Run the commands above against the commit you intend to publish if you need to refresh the result for a later revision.
 
 ## Scope and limitations
 
@@ -248,19 +267,19 @@ Sector Forge is a **campaign-generation and referee-support tool**, not an offic
 - Frontier toolkits create original prompts inspired by common campaign themes. Character outputs are concept dossiers, not full, rules-legal character sheets.
 - Generated results are prompts for play. Referees should review, adjust, and adjudicate them for their campaign.
 
+## SWN import compatibility status
+
+Sector Forge is being expanded to work with Sectors Without Number exports, but the current importer is **not yet complete feature parity** with the upstream application. The implementation and known gaps are tracked in [FEATURE_PARITY.md](FEATURE_PARITY.md).
+
+At this stage, Sector Forge supports a 10 × 12 default grid, native JSON and entity CSV import, normalized coordinate mapping, system/world conversion, preservation of original source records, explicit preserve/enrich modes, drawing of supported native navigation routes, conversion of supported layer regions, and a source-data view of exported faction records. Some upstream entity types remain source records instead of becoming fully editable Forge objects. Navigation routes remain separate from Forge trade routes, and imported SWN factions remain reference data instead of being silently run through Forge's different faction simulator.
 
 ## License and attribution
 
-### Inspiration and acknowledgment
+The optional import-enrichment feature adapts English facility occupation/situation entries from [Sectors Without Number](https://github.com/mpigsley/sectors-without-number) by Mitchel Pigsley, used under its MIT license. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). The upstream source data is used only to fill blank values in the explicit enrichment mode; imported values are preserved.
 
-Big thanks to [hamhambone's SWN Sector Generator](https://hamhambone.github.io/swn/). It was a great source of inspiration and a reference during the development of Sector Forge. It was helpful to me while exploring approaches to generating and presenting a *Stars Without Number* sector.
+Sector Forge is distributed under the MIT License; see [`LICENSE`](LICENSE).
 
-
-### Sector Forge license
-
-The Sector Forge source code is released under the [MIT License](LICENSE). See the `LICENSE` file for the full license text.
-
-### Stars Without Number
+Thanks to [Hamhambone's SWN Sector Generator](https://hamhambone.github.io/swn/) for inspiration and reference during development. Sector Forge is a separate implementation and is not affiliated with or endorsed by Hamhambone.
 
 *Stars Without Number* is a role-playing game published by Sine Nomine Publishing. Sector Forge is an unofficial fan-made project and does not claim ownership of the game, its setting, or any third-party material. This README is not a statement that the project is endorsed by the game's publisher. See the [official product page](https://sine-nomine-publishing.myshopify.com/products/stars-without-number-revised).
 

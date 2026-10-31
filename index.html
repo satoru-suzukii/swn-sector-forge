@@ -63,7 +63,7 @@
 							</select>
 						</div>
 					</div>
-					<p class="generation-advanced-note">System density controls how many of the 80 hexes contain stars. World &amp; orbital content controls planets, surface sites, and non-world survey objects such as stations, mines, ruins, wrecks, and installations. Leave both at Default to keep the existing one-click behavior.</p>
+					<p class="generation-advanced-note">System density controls how many of the 120 hexes contain stars. World &amp; orbital content controls planets, surface sites, and non-world survey objects such as stations, mines, ruins, wrecks, and installations. Leave both at Default to keep the existing one-click behavior.</p>
 				</details>
 				<div class="hero-footnote"><span class="mini-check">✓</span> No account. No server. Just you and the void.</div>
 			</div>
@@ -81,7 +81,7 @@
 			<div class="section-heading"><div><p class="eyebrow">START YOUR EXPEDITION</p><h2>Choose your launch point</h2></div><span class="section-index">01 <i>/</i> 02</span></div>
 			<div class="launch-card load-card">
 				<div class="launch-icon" aria-hidden="true">↥</div>
-				<div class="launch-copy"><h3>Continue an existing sector</h3><p>Import a previously exported sector JSON file and pick up where you left off.</p><label class="button button-secondary file-button" for="file-input">Load sector file <span aria-hidden="true">↗</span></label><input type="file" id="file-input" accept=".json,.txt,application/json,text/plain"></div>
+				<div class="launch-copy"><h3>Continue an existing sector</h3><p>Load a Sector Forge archive, or import a Sectors Without Number JSON/CSV export.</p><label class="field-label" for="swn-import-mode">When importing Sectors Without Number</label><select id="swn-import-mode" class="swn-import-mode"><option value="preserve" selected>Import as-is · leave missing details blank</option><option value="enrich">Import and generate missing details</option></select><p class="import-mode-help">Your imported information is kept. The second option fills supported gaps with Sector Forge generators.</p><label class="button button-secondary file-button" for="file-input">Load / import sector <span aria-hidden="true">↗</span></label><input type="file" id="file-input" accept=".json,.txt,.csv,application/json,text/plain,text/csv"></div>
 				<div class="card-index">IMPORT / 02</div>
 			</div>
 		</section>
@@ -116,6 +116,7 @@
 			</section>
 			<section data-title="Sector Map" id="map-container" class="content-panel map-panel"></section>
 			<section data-title="Worlds" class="content-panel data-panel"><div class="panel-heading"><div><p class="eyebrow">PLANETARY RECORDS</p><h2>World directory</h2><p class="panel-description">Browse and sort the worlds scattered across this sector.</p></div><span class="panel-heading-mark" aria-hidden="true">◎</span></div><div id="worlds-output" class="table-output"></div></section>
+			<section data-title="Source Data" id="source-data-panel" class="content-panel data-panel"><div class="panel-heading"><div><p class="eyebrow">IMPORT ARCHIVE / SOURCE RECORDS</p><h2>Source data</h2><p class="panel-description">Review the source entities preserved from an imported Sectors Without Number export.</p></div><span class="panel-heading-mark" aria-hidden="true">⇩</span></div><div id="source-data-summary" class="empty-note">No external source data is attached to this sector.</div><div id="source-data-output" class="table-output"></div><div id="source-data-auxiliary-output" class="table-output"></div></section>
 			<section data-title="Corporations" class="content-panel data-panel"><div class="panel-heading"><div><p class="eyebrow">COMMERCE / INDUSTRY</p><h2>Corporations</h2><p class="panel-description">The organizations competing to own tomorrow.</p></div><span class="panel-heading-mark" aria-hidden="true">▥</span></div><div id="corporations-output" class="table-output"></div></section>
 			<section data-title="Political Groups" class="content-panel data-panel"><div class="panel-heading"><div><p class="eyebrow">POWER / INFLUENCE</p><h2>Political groups</h2><p class="panel-description">Movements, coalitions, and powers with a stake in the sector.</p></div><span class="panel-heading-mark" aria-hidden="true">⌘</span></div><div id="political-groups-output" class="table-output"></div></section>
 			<section data-title="Religions" class="content-panel data-panel"><div class="panel-heading"><div><p class="eyebrow">BELIEF / IDEOLOGY</p><h2>Religions &amp; faiths</h2><p class="panel-description">Creeds that shape worlds—and the people willing to die for them.</p></div><span class="panel-heading-mark" aria-hidden="true">✧</span></div><div id="religions-output" class="table-output"></div></section>
@@ -172,6 +173,9 @@
 	<script src="dyntab.js"></script>
 	<script src="dynspoiler.js"></script>
 	<script src="textload.js"></script>
+	<script src="sector-grid.js"></script>
+	<script src="swn-entity-enrichment.js"></script>
+	<script src="swn-import.js"></script>
 	<script src="generators/genutil.js"></script>
 	<script src="generators/namegen.js"></script>
 	<script src="generators/swnnamegen.js"></script>

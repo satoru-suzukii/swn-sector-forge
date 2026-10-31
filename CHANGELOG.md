@@ -1,3 +1,25 @@
+# Changelog
+
+## Import hierarchy and player-export privacy hotfix — 1 November 2026
+
+- Replaced JSON group-order-dependent child placement with parent-graph resolution. Imported children now follow parent IDs through intermediate entities (for example, asteroid base → asteroid belt → system), even when the export lists the child group first.
+- Added strict coordinate-presence checks before numeric conversion. `null`, `undefined`, and blank coordinates can no longer be coerced into map hex `(0,0)` as a fallback.
+- Unresolved imported survey entities remain in the preserved source records and now generate an import warning instead of being silently attached to an unrelated system.
+- Fixed player-safe export to recursively filter `system.importedEntities` and `planet.importedEntities`, using hidden entity IDs and the complete hidden-ancestor chain. Hidden source records, raw attributes, and descendants are excluded from the serialized player archive; visible imported details remain available.
+- Expanded regression coverage with the five previously misplaced Acheron Rho asteroid bases, child-before-parent JSON group ordering, missing-coordinate/orphan cases, and serialized-player-JSON sentinel scans for hidden direct children and multi-level descendants.
+- Added a full Acheron Rho browser import regression: 293 source records, 36 systems/black holes, 46 planets, 210 non-planet survey objects, and all five corrected asteroid-base system assignments.
+
+## Sector Forge — 10 × 12 grid and SWN import foundation
+
+- Expanded the default map from 8 × 10 to 10 × 12 (120 editable hexes), with shared dimension validation used by map rendering, system generation, and editor operations.
+- Added a Sectors Without Number import adapter for native JSON exports and entity CSV exports.
+- Normalized one-based upstream entity coordinates separately from zero-based route/layer hex keys.
+- Added import modes: preserve source data as-is, or explicitly run Sector Forge enrichment to fill supported gaps.
+- Preserved source records and the original export payload in the GM sector archive; added a Source Data tab for reviewing imported records, routes, layers, and faction summaries.
+- Drew supported native navigation route paths on the map and mapped supported native layer regions into Forge regions. Source faction records remain reference data instead of being forced into Forge's different faction-turn model.
+- Added player-safe filtering for imported hidden regions and kept raw source payloads out of player-safe archives.
+- Added regression fixtures for all three supplied CSV exports plus native JSON-shaped route/layer/faction coverage.
+
 # Sector Forge 1.0 — Release notes
 
 ## GitHub-ready branding and favicon assets

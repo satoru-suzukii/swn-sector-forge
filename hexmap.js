@@ -11,15 +11,15 @@ var Hexmap = {
   _selectedHex: null,
   _state: null,
   _palette: ['#70e0cf', '#e6bd83', '#a7a7ff', '#e78eab', '#8bb4ef', '#b4db85', '#d6a4f2', '#f0a878'],
-  _width: 530,
-  _height: 745,
+  _width: 640,
+  _height: 880,
   _radius: 39,
   getStyle: function(name) {
     if (!this._STYLE) this._STYLE = window.getComputedStyle(document.body);
     return this._STYLE.getPropertyValue(name) || '';
   },
   _center: function(x, y) {
-    return {x: 48 + Number(x) * 58.5, y: 40 + (Number(y) + .5 * (Number(x) % 2)) * 67.55};
+    return {x: 40 + Number(x) * 58.5, y: 35 + (Number(y) + .5 * (Number(x) % 2)) * 67.55};
   },
   _hexPoints: function(x, y, r) {
     var c = this._center(x, y), p = [];
@@ -134,6 +134,9 @@ var Hexmap = {
       svg.replaceWith(replacement);
       svg = replacement;
     }
+    var dims = typeof SectorGrid !== 'undefined' ? SectorGrid.viewport(sector) : {width:640,height:880,columns:10,rows:12};
+    this._width = dims.width; this._height = dims.height;
+    svg.style.aspectRatio = this._width + ' / ' + this._height;
     var old = this._state;
     var sameSvg = !!(old && old.svg === svg);
     // A rebuilt map workspace always starts neutral; an armed move mode must never leak
@@ -157,6 +160,8 @@ var Hexmap = {
     s.svg = svg;
     s.sector = sector;
     if (selectedSystem !== undefined) s.selectedSystem = selectedSystem || null;
+    var dims = typeof SectorGrid !== 'undefined' ? SectorGrid.viewport(sector) : {width:640,height:880,columns:10,rows:12};
+    this._width = dims.width; this._height = dims.height;
     var W = this._width, H = this._height, R = this._radius;
     var center = function(x,y) { return self._center(x,y); };
     var esc = function(v) { return self._escape(v); };
@@ -177,8 +182,24 @@ var Hexmap = {
       var c=center(sys.x,sys.y), col=sys.controllingFactionColor||'#70e0cf';
       return '<circle class="territory-ring" data-system-id="'+esc(sys.id)+'" cx="'+c.x+'" cy="'+c.y+'" r="21" stroke="'+esc(col)+'"/><circle class="territory-ring-soft" data-system-id="'+esc(sys.id)+'" cx="'+c.x+'" cy="'+c.y+'" r="24" fill="none" stroke="'+esc(col)+'" stroke-opacity=".22" stroke-width="4"/>';
     }).join('') : '';
+    // Native SWN routes are polylines through hex coordinates (not merely direct
+    // system-to-system trade links), so render their vertices as a separate layer.
+    var sourceRoutes = ((sector.swnImport || {}).navigationRoutes || []).filter(function(route){ return !route.isHidden; }).map(function(route){
+      var path = Array.isArray(route.hexes) ? route.hexes : [];
+      var color = /^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(String(route.color || '')) ? route.color : '#dbdbdb';
+      var width = route.width === 'thick' ? 3 : (route.width === 'thin' ? 1 : 1.7);
+      var dash = /dash|dot/i.test(String(route.style || '')) ? ' stroke-dasharray="5 4"' : '';
+      var segments = [];
+      for (var i=1;i<path.length;i++) {
+        var a=path[i-1], b=path[i];
+        if (!a || !b || !SectorGrid.validCoordinates(sector,a.x,a.y) || !SectorGrid.validCoordinates(sector,b.x,b.y)) continue;
+        var ca=center(a.x,a.y), cb=center(b.x,b.y);
+        segments.push('<line class="swn-navigation-route" x1="'+ca.x+'" y1="'+ca.y+'" x2="'+cb.x+'" y2="'+cb.y+'" stroke="'+esc(color)+'" stroke-width="'+width+'"'+dash+'><title>'+esc(route.name || route.id)+'</title></line>');
+      }
+      return segments.join('');
+    }).join('');
     var grid = '';
-    for (var x=0;x<8;x++) for(var y=0;y<10;y++) {
+    for (var x=0;x<dims.columns;x++) for(var y=0;y<dims.rows;y++) {
       var c=center(x,y), region=getRegionFor(x,y), occupiedSystem=systemAt.get(x+','+y), occupied=!!occupiedSystem;
       var selectedHex = !!(self._selectedHex && Number(self._selectedHex.x)===x && Number(self._selectedHex.y)===y);
       var moveTarget = self._moveMode && !occupied;
@@ -213,10 +234,11 @@ var Hexmap = {
       '<rect class="map-background" x="0" y="0" width="'+W+'" height="'+H+'" fill="#08111d"/>'+
       '<rect class="map-background" x="0" y="0" width="'+W+'" height="'+H+'" fill="url(#map-glow)"/>'+
       '<rect class="map-background" x="0" y="0" width="'+W+'" height="'+H+'" fill="url(#star-dots)"/>'+
-      '<g class="map-grid">'+grid+'</g><g class="map-routes">'+routes+'</g><g class="map-claims">'+claims+'</g><g class="map-systems">'+systems+'</g>'+
-      '<text x="18" y="736" class="map-stamp" pointer-events="none">SECTOR FORGE / FIXED GRID 08 × 10</text>';
+      '<g class="map-grid">'+grid+'</g><g class="map-routes">'+routes+'</g><g class="map-swn-routes">'+sourceRoutes+'</g><g class="map-claims">'+claims+'</g><g class="map-systems">'+systems+'</g>'+
+      '<text x="18" y="'+(H-18)+'" class="map-stamp" pointer-events="none">SECTOR FORGE / '+dims.columns+' × '+dims.rows+' HEX GRID</text>'; 
     // Immutable viewBox: render calls cannot inherit zoom or pan state from prior interactions.
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.style.aspectRatio = W + ' / ' + H;
     svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     this._syncMoveButton();
   },

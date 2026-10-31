@@ -97,7 +97,7 @@ DynEdit.edit = function(title, object, template=null, callback=null) {
 						let value = originalValue;
 						let count = 10;
 						while (count > 0 && value == originalValue) {
-							value = generatorFunction(object);
+							value = generatorFunction(currentObject());
 						}
 						inputElement.value = value;
 					});
@@ -127,16 +127,36 @@ DynEdit.edit = function(title, object, template=null, callback=null) {
 	
 	/* ======================================================================== */
 	
+	function currentObject() {
+		let draft = {};
+		for (let key in object) draft[key] = object[key];
+		for (let key in data) {
+			let item = data[key];
+			if (!item || !item.inputElem) continue;
+			if (item.type === 'boolean') draft[key] = item.inputElem.checked;
+			else if (item.type === 'number') draft[key] = item.inputElem.value === '' ? item.originalValue : Number(item.inputElem.value);
+			else draft[key] = item.inputElem.value;
+		}
+		return draft;
+	}
+
 	function onRandomizeAll() {
-		for (property in data) {
+		// Population determines the gravity envelope. Randomize it first and gravity
+		// last so the editor's "Randomize All" action respects that dependency.
+		let properties = Object.keys(data);
+		if (data.population && data.gravity) {
+			properties = properties.filter(function(key) { return key !== 'population' && key !== 'gravity'; });
+			properties.unshift('population');
+			properties.push('gravity');
+		}
+		for (let property of properties) {
 			let propertyData = data[property];
-			
-			if (propertyData.generator !== null) {
-				propertyData.inputElem.value = propertyData.generator(object);
+			if (propertyData && propertyData.generator !== null) {
+				propertyData.inputElem.value = propertyData.generator(currentObject());
 			}
 		}
 	}
-	
+
 	function onRevertAll() {
 		for (property in data) {
 			let propertyData = data[property];

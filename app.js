@@ -38,27 +38,40 @@ App.initialize = function() {
 	// set up 'load json file' button
 	
 	let fileInputElement = document.getElementById('file-input');
-	fileInputElement.addEventListener('change', function(event) {	
-		let reader = new FileReader();
+	fileInputElement.addEventListener('change', function(event) {
+		var file = fileInputElement.files && fileInputElement.files[0];
+		if (!file) return;
+		var reader = new FileReader();
 		reader.onload = function(e) {
-			generatorContainerElement.classList.add('hide-section');
-			
 			try {
-				let data = e.target.result;
-				let sector = JSON.parse(data);
+				var text = String(e.target.result || '');
+				var modeElement = document.getElementById('swn-import-mode');
+				var importMode = modeElement && modeElement.value === 'enrich' ? 'enrich' : 'preserve';
+				var sector;
+				if (/\.csv$/i.test(file.name) || (/^\s*Name,Entity Type,Location,/i.test(text))) {
+					sector = SwnImport.fromCSV(text, file.name, importMode);
+				} else {
+					var data = JSON.parse(text);
+					sector = SwnImport.isNativeExport(data) ? SwnImport.fromJSON(data, file.name, importMode) : data;
+				}
+				if (!sector || !Array.isArray(sector.systems)) throw new Error('The file did not contain a recognizable Sector Forge sector or Sectors Without Number export.');
+				generatorContainerElement.classList.add('hide-section');
 				App.displaySector(sector);
-				tabs.setVisibleTab(1); // set the visible tab to the galaxy generator
+				tabs.setVisibleTab(1);
 				viewerContainerElement.classList.remove('hide-section');
 				App.setURL(sector);
+				if (sector.importMetadata && sector.importMetadata.warnings && sector.importMetadata.warnings.length) {
+					window.alert('Import complete with notes:\n\n' + sector.importMetadata.warnings.slice(0, 8).join('\n') + (sector.importMetadata.warnings.length > 8 ? '\n…and ' + (sector.importMetadata.warnings.length - 8) + ' more.' : ''));
+				} else if (sector.swnImport) {
+					window.alert('Import complete: ' + sector.name + '\n' + sector.systems.length + ' systems mapped to the sector grid. ' + sector.swnImport.records.length + ' source records preserved.');
+				}
 			} catch (error) {
-				window.alert('Error loading sector from file: ' + error);
-				console.warn(error.stack);
-				viewerContainerElement.classList.add('hide-section');
-				
-				generatorContainerElement.classList.remove('hide-section');				
+				window.alert('Error loading sector file: ' + (error.message || error));
+				console.warn(error.stack || error);
 			}
-		}
-		reader.readAsText(fileInputElement.files[0]);
+			fileInputElement.value = '';
+		};
+		reader.readAsText(file);
 	});
 	
 	// ---------------------------------------------------------------------- //
@@ -157,6 +170,7 @@ App.generateSector = function() {
 	
 	sector.name = sectorName;
 	sector.gmMode = true;
+	sector.grid = {columns:SectorGrid.DEFAULT_COLUMNS, rows:SectorGrid.DEFAULT_ROWS};
 	
 	let generationModeElement = document.getElementById('world-generation-mode');
 	let worldGenerationMode = generationModeElement && generationModeElement.value === 'expanded' ? 'expanded' : 'core';
@@ -166,7 +180,7 @@ App.generateSector = function() {
 	let worldDensity = worldDensityElement && ['default','empty','scarce','normal','crowded'].includes(worldDensityElement.value) ? worldDensityElement.value : 'default';
 	sector.worldGenerationMode = worldGenerationMode;
 	sector.generationSettings = {systemDensity:systemDensity, worldDensity:worldDensity};
-	sector.systems = WorldGenerator.generate({worldGenerationMode:worldGenerationMode, systemDensity:systemDensity, worldDensity:worldDensity});
+	sector.systems = WorldGenerator.generate({worldGenerationMode:worldGenerationMode, systemDensity:systemDensity, worldDensity:worldDensity, columns:sector.grid.columns, rows:sector.grid.rows});
 	sector.corporations = CorporationGenerator.generate();
 	sector.religions = ReligionGenerator.generate();
 	sector.politicalGroups = PoliticalGroupGenerator.generate();
@@ -183,26 +197,90 @@ App.generateSectorName = function() {
 	return name;
 }
 
+App.getHiddenSwnEntityIds = function(sector) {
+	let records = sector && sector.swnImport && Array.isArray(sector.swnImport.records) ? sector.swnImport.records.slice() : [];
+	// Some imported child records are also stored on their parent system/planet.
+	// Include those copies as a fallback for older saves without a complete source
+	// record table, so hidden ancestry is still understood during player export.
+	function collectNested(entities) {
+		(entities || []).forEach(function(entity) {
+			if (!entity || typeof entity !== 'object') return;
+			records.push(entity);
+			collectNested(entity.importedEntities);
+		});
+	}
+	(sector && sector.systems || []).forEach(function(system) {
+		collectNested(system.importedEntities);
+		(system.planets || []).forEach(function(planet) { collectNested(planet.importedEntities); });
+	});
+	let hidden = new Set(records.filter(function(record) {
+		return record && (record.isHidden || record.sourceIsHidden || (record.raw && record.raw.isHidden));
+	}).map(function(record) { return String(record.id || record.sourceId || ''); }).filter(Boolean));
+	let changed = true;
+	while (changed) {
+		changed = false;
+		records.forEach(function(record) {
+			let id = String(record && (record.id || record.sourceId) || '');
+			let parentId = String(record && (record.parentId || record.parent || (record.raw && record.raw.parent)) || '');
+			if (id && parentId && hidden.has(parentId) && !hidden.has(id)) { hidden.add(id); changed = true; }
+		});
+	}
+	return hidden;
+}
+
+App.censorImportedEntities = function(entities, hiddenSwnEntityIds) {
+	return (entities || []).filter(function(entity) {
+		if (!entity || typeof entity !== 'object') return false;
+		let id = String(entity.id || entity.sourceId || '');
+		let parentId = String(entity.parentId || entity.parent || (entity.raw && entity.raw.parent) || '');
+		let explicitlyHidden = !!(entity.isHidden || entity.sourceIsHidden || (entity.raw && entity.raw.isHidden));
+		return !explicitlyHidden && !hiddenSwnEntityIds.has(id) && !hiddenSwnEntityIds.has(parentId);
+	}).map(function(entity) {
+		let safeEntity = JSON.parse(JSON.stringify(entity));
+		if (Array.isArray(safeEntity.importedEntities)) {
+			safeEntity.importedEntities = App.censorImportedEntities(safeEntity.importedEntities, hiddenSwnEntityIds);
+		}
+		return safeEntity;
+	});
+}
+
 App.censorSector = function(sector) {
 	let newSector = {};
+	let hiddenSwnEntityIds = App.getHiddenSwnEntityIds(sector);
 	
 	newSector.name = sector.name;
 	newSector.gmMode = false;
+	newSector.grid = sector.grid || {columns:SectorGrid.DEFAULT_COLUMNS, rows:SectorGrid.DEFAULT_ROWS};
 	newSector.schemaVersion = sector.schemaVersion || 3;
 	newSector.worldGenerationMode = sector.worldGenerationMode || 'core';
 	newSector.tradeRoutes = JSON.parse(JSON.stringify(sector.tradeRoutes || []));
 	newSector.polities = (sector.polities || []).map(function(polity) { return App.censorObject(polity, ['relations', 'policy']); });
 	newSector.markets = (sector.markets || []).map(function(market) { return App.censorObject(market, ['friction', 'traits']); });
 	
-	newSector.systems = App.censorObjects(sector.systems, ['pointsOfInterest', 'bodies', 'factionInfluence', 'controllingFactionId', 'controllingFactionName', 'controllingFactionColor', 'manualControllerFactionId', 'isContested']);
-	newSector.regions = JSON.parse(JSON.stringify(sector.regions || []));
+	// SWN marks referee-only entities with isHidden. Keep them in the GM sector,
+	// but exclude them from player-safe exports after mapping into Forge objects.
+	newSector.systems = App.censorObjects((sector.systems || []).filter(function(system) { return !system.sourceIsHidden && !hiddenSwnEntityIds.has(String(system.sourceId || '')); }), ['pointsOfInterest', 'factionInfluence', 'controllingFactionId', 'controllingFactionName', 'controllingFactionColor', 'manualControllerFactionId', 'isContested']);
+	// Imported SWN layers/regions can be referee-only. Do not leak those overlays
+	// into player-safe archives; the complete source payload stays in the GM archive.
+	newSector.regions = JSON.parse(JSON.stringify((sector.regions || []).filter(function(region) { return !region.sourceHidden && !region.sourceLayerHidden; })));
 	for (let i = 0; i < newSector.systems.length; i++) {
 		let system = newSector.systems[i];
-		system.planets = App.censorObjects(system.planets, ['privateNotes', 'tag1', 'tag2', 'tagCandidate3', 'terrain']);
+		system.importedEntities = App.censorImportedEntities(system.importedEntities, hiddenSwnEntityIds);
+		system.planets = App.censorObjects((system.planets || []).filter(function(planet) { return !planet.sourceIsHidden && !hiddenSwnEntityIds.has(String(planet.sourceId || '')); }), ['privateNotes', 'tag1', 'tag2', 'tagCandidate3', 'terrain']);
 		system.planets.forEach(function(planet) {
+			// Parent-level source entities can contain referee-only details too.
+			planet.importedEntities = App.censorImportedEntities(planet.importedEntities, hiddenSwnEntityIds);
 			// Descriptions contain GM-facing tag names; rebuild a player-safe summary.
 			planet.description = WorldGenerator.describePlanet(planet, {hideTags:true});
 		});
+		// Keep public imported survey entities in player exports. Hidden entities and
+		// every descendant of a hidden source entity are removed before serialization.
+		let visibleImportedBodies = (system.bodies || []).filter(function(body) {
+			if (!body || !body.importedFromSWN) return false;
+			if (body.sourceIsHidden || hiddenSwnEntityIds.has(String(body.sourceEntityId || ''))) return false;
+			return !body.sourceParent || !hiddenSwnEntityIds.has(String(body.sourceParent));
+		});
+		system.bodies = App.censorObjects(visibleImportedBodies, ['sourceAttributes','sourceEntityId','sourceEntityType','importedFromSWN','sourceParent','sourceParentEntity','sourceIsHidden','generatedFields']);
 		system.summary = system.planets.length ? system.planets[0].description : 'An uninhabited system with unexplored orbital bodies and uncertain prospects.';
 	}
 	
@@ -266,7 +344,31 @@ App.displayCorporationDirectory = function(sector) {
 };
 
 App.displaySector = function(sector) {
-	CampaignTools.enrichSector(sector, true);
+	sector = sector || {};
+	sector.grid = sector.grid || {columns:SectorGrid.DEFAULT_COLUMNS, rows:SectorGrid.DEFAULT_ROWS};
+	var preserveImported = !!(sector.importMetadata && sector.importMetadata.mode === 'preserve');
+	if (preserveImported) {
+		// As-is imports must not be silently populated with Forge-generated campaign content.
+		sector.systems = Array.isArray(sector.systems) ? sector.systems : [];
+		sector.systems.forEach(function(system) {
+			system.planets = Array.isArray(system.planets) ? system.planets : [];
+			system.pointsOfInterest = Array.isArray(system.pointsOfInterest) ? system.pointsOfInterest : [];
+			system.bodies = Array.isArray(system.bodies) ? system.bodies : [];
+		});
+		['corporations','religions','politicalGroups','aliens','regions','tradeRoutes','polities','markets','factions','adventures','threats','people','supplementContent','corporationMarketLinks','diplomacy','factionNews'].forEach(function(key) {
+			if (!Array.isArray(sector[key])) sector[key] = [];
+		});
+	} else {
+		if (sector.importMetadata && sector.importMetadata.mode === 'enrich' && sector.swnImport) {
+			// Imported source data does not contain Forge's distinct campaign layer.
+			// Only this explicit opt-in creates that layer; existing imported fields stay intact.
+			if (!Array.isArray(sector.corporations) || !sector.corporations.length) sector.corporations = CorporationGenerator.generate();
+			if (!Array.isArray(sector.religions) || !sector.religions.length) sector.religions = ReligionGenerator.generate();
+			if (!Array.isArray(sector.politicalGroups) || !sector.politicalGroups.length) sector.politicalGroups = PoliticalGroupGenerator.generate();
+			if (!Array.isArray(sector.aliens) || !sector.aliens.length) sector.aliens = AlienGenerator.generate();
+		}
+		CampaignTools.enrichSector(sector, true);
+	}
 	App.currentSector = sector;
 	// set up edit mode
 	if (sector.gmMode) {
@@ -350,6 +452,7 @@ App.displaySector = function(sector) {
 	aliensTable.addRows(sector.aliens);
 	aliensTable.sort(0);
 	App.renderCampaignPanels(sector);
+	App.renderSourceData(sector);
 	App.populateSupplementTargets(sector);
 }
 
@@ -420,7 +523,8 @@ App.displayHexmap = function(sector, selectedSystem=null) {
 	worldStat.innerHTML = '<strong>' + worldCount + '</strong> worlds';
 	let gridStat = document.createElement('span');
 	gridStat.className = 'map-stat';
-	gridStat.innerHTML = '<strong>08 × 10</strong> grid';
+	var gridSize = SectorGrid.dimensions(sector);
+	gridStat.innerHTML = '<strong>' + gridSize.columns + ' × ' + gridSize.rows + '</strong> grid';
 	stats.appendChild(systemStat);
 	stats.appendChild(worldStat);
 	stats.appendChild(gridStat);
@@ -594,7 +698,7 @@ App.displayEmptyHexInspector = function(inspectorElement, hex, sector) {
 App.createSystemAtHex = function(sector, x, y) {
 	if (!sector || !Hexmap._editMode) return null;
 	x = Number(x); y = Number(y);
-	if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x > 7 || y < 0 || y > 9) return null;
+	if (!SectorGrid.validCoordinates(sector, x, y)) return null;
 	if ((sector.systems || []).some(function(item) { return Number(item.x) === x && Number(item.y) === y; })) {
 		window.alert('That hex is already occupied. Choose an empty hex instead.'); return null;
 	}
@@ -642,7 +746,7 @@ App.syncSystemBodies = function(system) {
 	if (!system) return;
 	var oldBodies = Array.isArray(system.bodies) ? system.bodies : [];
 	var stars = oldBodies.filter(function(body) { return body && body.bodyClass === 'S'; });
-	var extras = oldBodies.filter(function(body) { return body && body.bodyClass !== 'S' && body.bodyClass !== 'P' && !body.planetId && !body.worldName && !body.isGeneratedWorld; });
+	var extras = oldBodies.filter(function(body) { return body && body.bodyClass !== 'S' && body.bodyClass !== 'P' && !body.planetId && (!body.worldName || body.importedFromSWN) && !body.isGeneratedWorld; });
 	var worlds = (system.planets || []).map(function(planet, index) {
 		planet.id = planet.id || system.id + '-W' + String(index + 1).padStart(2,'0');
 		planet.systemId = system.id;
@@ -821,6 +925,50 @@ App.renderSimpleTable = function(container, headers, rows, action) {
 	});
 };
 
+App.renderSourceData = function(sector) {
+	var summary = document.getElementById('source-data-summary');
+	var output = document.getElementById('source-data-output');
+	if (!summary || !output) return;
+	var imported = sector && sector.swnImport;
+	if (!imported) {
+		summary.textContent = 'No external source data is attached to this sector. When you import a Sectors Without Number export, its source records will be listed here.';
+		output.innerHTML = '';
+		return;
+	}
+	var records = Array.isArray(imported.records) ? imported.records : [];
+	var mode = sector.importMetadata && sector.importMetadata.mode === 'enrich' ? 'Import + generate missing details' : 'Import as-is';
+	var sourcePayload = imported.sourceData || {};
+	var auxiliary = ['routes','layers','factions'].map(function(key) { var value = sourcePayload[key]; var count = Array.isArray(value) ? value.length : (value && typeof value === 'object' ? Object.keys(value).length : 0); return count ? key + ' (' + count + ')' : ''; }).filter(Boolean);
+	summary.textContent = imported.source + ' · ' + String(imported.format || 'file').toUpperCase() + ' · ' + records.length + ' source records preserved · ' + sector.systems.length + ' systems mapped · ' + mode + (auxiliary.length ? ' · source-only data retained: ' + auxiliary.join(', ') : '') + '. Unsupported and source-specific entities remain in this archive and are not discarded.';
+	var rows = records.map(function(record) {
+		var coordinate = record.x !== '' && record.x != null && record.y !== '' && record.y != null
+			? String(record.x).padStart(2, '0') + String(record.y).padStart(2, '0') : '—';
+		var tags = Array.isArray(record.tags) ? record.tags.join(', ') : String(record.tags || '');
+		return {item:record, values:[record.type || '—', record.name || '—', coordinate, record.parent || '—', record.occupation || '—', record.situation || '—', tags || '—']};
+	});
+	App.renderSimpleTable(output, ['Entity type','Name','Hex','Parent','Occupation','Situation','Tags'], rows, null);
+	var auxiliaryOutput = document.getElementById('source-data-auxiliary-output');
+	if (auxiliaryOutput) {
+		auxiliaryOutput.innerHTML = '';
+		var auxiliaryRows = [];
+		(imported.navigationRoutes || []).forEach(function(route) {
+			auxiliaryRows.push({item:route, values:['Navigation route', route.name || route.id, (route.hexes || []).length + ' hex points', (route.style || 'solid') + ' · ' + (route.width || 'normal') + ' · ' + (route.isHidden ? 'hidden' : 'visible'), route.color || '—']});
+		});
+		(imported.layers || []).forEach(function(layer) {
+			auxiliaryRows.push({item:layer, values:['Map layer', layer.name || layer.id, (layer.regionCount || 0) + ' regions / ' + (layer.hexCount || 0) + ' mapped hexes', layer.isHidden ? 'hidden' : 'visible', '—']});
+		});
+		(imported.factions || []).forEach(function(faction) {
+			var stats = 'Force ' + (faction.force === '' ? '—' : faction.force) + ' · Cunning ' + (faction.cunning === '' ? '—' : faction.cunning) + ' · Wealth ' + (faction.wealth === '' ? '—' : faction.wealth);
+			auxiliaryRows.push({item:faction, values:['SWN faction (source record)', faction.name || faction.id, stats, (faction.assetCount || 0) + ' assets · ' + (faction.goal || 'no goal exported'), faction.relationship || '—']});
+		});
+		if (auxiliaryRows.length) {
+			App.appendElement(auxiliaryOutput, 'h3', 'Additional SWN data');
+			App.appendElement(auxiliaryOutput, 'p', 'Navigation routes are drawn on the map when their path is supported. Layer regions are converted to Forge map regions where possible. Imported SWN factions remain source records rather than being silently converted into Forge’s different faction-turn model.', 'panel-description');
+			App.renderSimpleTable(auxiliaryOutput, ['Source data type','Name','Contents','Status / details','Color / relationship'], auxiliaryRows, null);
+		}
+	}
+};
+
 App.renderStoryCards = function(container, items, config) {
 	container.innerHTML = '';
 	if (!items || !items.length) {
@@ -864,7 +1012,8 @@ App.editCampaignObject = function(title, object, hide, afterSave, lists) {
 };
 
 App.renderCampaignPanels = function(sector) {
-	if (window.CampaignTools) { CampaignTools.recalculateInfluence(sector); CampaignTools.linkCampaignRecords(sector); }
+	var preserveImported = !!(sector.importMetadata && sector.importMetadata.mode === 'preserve');
+	if (window.CampaignTools && !preserveImported) { CampaignTools.recalculateInfluence(sector); CampaignTools.linkCampaignRecords(sector); }
 	App.displayCorporationDirectory(sector);
 	var status = document.getElementById('faction-turn-status');
 	if (status) status.textContent = 'Faction turn ' + (sector.factionTurn || 0) + ' · ' + (sector.factions || []).length + ' active factions';
@@ -908,7 +1057,7 @@ App.renderCampaignPanels = function(sector) {
 	var newsElem = document.getElementById('faction-news');
 	if (!(sector.factionNews || []).length) newsElem.innerHTML = '<p class="empty-note">No faction turn has been advanced yet. Start one to generate sector news.</p>';
 
-	CampaignTools.ensureDiplomacy(sector);
+	if (!preserveImported) CampaignTools.ensureDiplomacy(sector);
 	App.renderSimpleTable(document.getElementById('diplomacy-output'), ['Faction A','Relationship','Faction B','Trust','Tension','Latest development'], (sector.diplomacy || []).map(function(rel) {
 		var a=(sector.factions||[]).find(function(f){return f.id===rel.factionAId;})||{};
 		var b=(sector.factions||[]).find(function(f){return f.id===rel.factionBId;})||{};
@@ -1099,9 +1248,9 @@ App.displaySystemInspector = function(inspectorElement, system, sector) {
 				if (!saved) return;
 				var x = Number(system.x), y = Number(system.y);
 				var collision = (sector.systems || []).some(function(other) { return other.id !== system.id && Number(other.x) === x && Number(other.y) === y; });
-				if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x > 7 || y < 0 || y > 9 || collision) {
+				if (!SectorGrid.validCoordinates(sector, x, y) || collision) {
 					system.x = originalX; system.y = originalY;
-					window.alert(collision ? 'That hex is already occupied. The system location was restored.' : 'Hex coordinates must be within the map: X 0–7 and Y 0–9. The system location was restored.');
+					window.alert(collision ? 'That hex is already occupied. The system location was restored.' : 'Hex coordinates must be within the map: X 00–' + String(SectorGrid.dimensions(sector).columns - 1).padStart(2,'0') + ' and Y 00–' + String(SectorGrid.dimensions(sector).rows - 1).padStart(2,'0') + '. The system location was restored.');
 				}
 				App.refreshSectorAfterMapEdit(sector, system);
 			});
@@ -1237,14 +1386,14 @@ App.displaySystemInspector = function(inspectorElement, system, sector) {
 			simpleAppend(planetBodyElement, 'p', planet.privateNotes, 'secondary');
 		}
 		
-		if ('tag1' in planet) {
+		if (planet.tag1) {
 			let tag = WorldGenerator.tagDictionary.get(planet.tag1);
-			createTagSpoiler(planetBodyElement, tag);
+			if (tag) createTagSpoiler(planetBodyElement, tag); // Unknown source tags remain visible by name without a generator lookup.
 		}
 		
-		if ('tag2' in planet) {
+		if (planet.tag2) {
 			let tag = WorldGenerator.tagDictionary.get(planet.tag2);
-			createTagSpoiler(planetBodyElement, tag);
+			if (tag) createTagSpoiler(planetBodyElement, tag);
 		}
 	}
 	
@@ -1298,7 +1447,9 @@ App.displaySystemInspector = function(inspectorElement, system, sector) {
 		rerollBodiesButton.setAttribute('aria-label', 'Reroll system survey');
 		
 		function rerollSurvey() {
-			system.bodies = StarSystemGenerator.generate(Array.isArray(system.planets) ? system.planets : [], {contentDensity:(sector.generationSettings && sector.generationSettings.worldDensity) || 'default'});
+			var importedObjects = (system.bodies || []).filter(function(body) { return body && body.importedFromSWN; });
+			var generatedBodies = StarSystemGenerator.generate(Array.isArray(system.planets) ? system.planets : [], {contentDensity:(sector.generationSettings && sector.generationSettings.worldDensity) || 'default'});
+			system.bodies = generatedBodies.concat(importedObjects);
 			App.setURL(sector);
 			App.createDownloadLink(sector);
 			App.displayHexmap(sector, system);
@@ -1319,16 +1470,27 @@ App.displaySystemInspector = function(inspectorElement, system, sector) {
 				else name = '';
 			}
 			name = String(name == null ? '' : name).trim() || '—';
-			let row = appendRow(bodyTableBody, [String(body.type || 'Unclassified body'), name]);
+			let detailParts = [];
+			if (body.occupation) detailParts.push('Occupation: ' + body.occupation);
+			if (body.situation) detailParts.push('Situation: ' + body.situation);
+			if (body.description) detailParts.push('Description: ' + body.description);
+			if (body.tags && body.tags.length) detailParts.push('Tags: ' + body.tags.join(', '));
+			if (body.sourceParentName) detailParts.push('Parent: ' + body.sourceParentName);
+			if (body.generatedFields && body.generatedFields.length) detailParts.push('Forge-filled: ' + body.generatedFields.join(', '));
+			if (body.importedFromSWN && !body.occupation && !body.situation && !body.description && !(body.tags && body.tags.length)) {
+				detailParts.push('No additional details were included in the SWN export.');
+			}
+			let row = appendRow(bodyTableBody, [String(body.type || 'Unclassified body'), name, detailParts.join(' · ') || '—']);
 			row.className = 'system-survey-row';
 			row.cells[0].className = 'system-survey-type';
 			row.cells[1].className = 'system-survey-name';
+			row.cells[2].className = 'system-survey-details';
 			row.setAttribute('data-body-class', String(body.bodyClass || 'N'));
-			if (!body.isGeneratedWorld && body.bodyClass !== 'S' && !body.planetId && !body.worldName) {
+			if (!body.isGeneratedWorld && body.bodyClass !== 'S' && !body.planetId && (!body.worldName || body.importedFromSWN)) {
 				let actions = simpleAppend(row.cells[1], 'span', '', 'edit-zone survey-row-actions');
 				appendText(actions, ' ');
 				let editBody = simpleAppend(actions, 'span', 'edit', 'textbutton');
-				editBody.addEventListener('click', function() { DynEdit.edit('Editing survey object: ' + (body.name || body.type), body, {hide:['bodyClass','isGeneratedWorld','planetId','worldName','id']}, function(saved) { if (saved) { body.bodyClass='N'; body.isGeneratedWorld=false; App.refreshSectorAfterMapEdit(sector,system); } }); });
+				editBody.addEventListener('click', function() { DynEdit.edit('Editing survey object: ' + (body.name || body.type), body, {hide:['bodyClass','isGeneratedWorld','planetId','worldName','id','sourceEntityId','sourceEntityType','importedFromSWN','sourceParent','sourceParentName','sourceParentEntity','sourceAttributes','generatedFields']}, function(saved) { if (saved) { body.bodyClass='N'; body.isGeneratedWorld=false; if (body.importedFromSWN) body.worldName=body.name; App.refreshSectorAfterMapEdit(sector,system); } }); });
 				appendText(actions, ' | ');
 				let deleteBody = simpleAppend(actions, 'span', 'delete', 'textbutton');
 				deleteBody.addEventListener('click', function() { App.showConfirmation('Delete survey object ' + (body.name || body.type) + '?', function(confirmed) { if (!confirmed) return; system.bodies.splice(system.bodies.indexOf(body),1); App.refreshSectorAfterMapEdit(sector,system); }); });
