@@ -5,12 +5,15 @@ var WorldGenerator = {};
 WorldGenerator.generate = function(options={}) {
 	options = options || {};
 	var requestedCount = Number(options.systemCount);
+	var gridColumns = Number(options.columns) || (typeof SectorGrid !== 'undefined' ? SectorGrid.DEFAULT_COLUMNS : 10);
+	var gridRows = Number(options.rows) || (typeof SectorGrid !== 'undefined' ? SectorGrid.DEFAULT_ROWS : 12);
+	var gridCapacity = gridColumns * gridRows;
 	var worldGenerationMode = options.worldGenerationMode === 'expanded' ? 'expanded' : 'core';
 	var systemDensity = ['default','empty','scarce','normal','crowded'].indexOf(options.systemDensity) >= 0 ? options.systemDensity : 'default';
 	var worldDensity = ['default','empty','scarce','normal','crowded'].indexOf(options.worldDensity) >= 0 ? options.worldDensity : 'default';
 	var hasExplicitCount = Object.prototype.hasOwnProperty.call(options, 'systemCount') && Number.isFinite(requestedCount);
 	var targetSystemCount;
-	if (hasExplicitCount) targetSystemCount = Math.min(80, Math.max(0, Math.round(requestedCount)));
+	if (hasExplicitCount) targetSystemCount = Math.min(gridCapacity, Math.max(0, Math.round(requestedCount)));
 	else if (systemDensity === 'empty') targetSystemCount = 0;
 	else if (systemDensity === 'scarce') targetSystemCount = GenUtil.randInt(8, 14);
 	else if (systemDensity === 'normal') targetSystemCount = GenUtil.randInt(31, 40);
@@ -18,7 +21,7 @@ WorldGenerator.generate = function(options={}) {
 	else targetSystemCount = GenUtil.randInt(21, 30);
 	var systems = [];
 	var allHexes = [];
-	for (var hx = 0; hx < 8; hx++) for (var hy = 0; hy < 10; hy++) allHexes.push({x:hx, y:hy});
+	for (var hx = 0; hx < gridColumns; hx++) for (var hy = 0; hy < gridRows; hy++) allHexes.push({x:hx, y:hy});
 	allHexes = GenUtil.shuffle(allHexes).slice(0, targetSystemCount);
 	var occupiedHexes = new Set();
 
@@ -141,7 +144,7 @@ WorldGenerator.generatePlanet = function(mode) {
 	let atmosphere = this.pickRandom2d6(this.atmospheres);
 	let temperature = this.pickRandom2d6(this.temperatures);
 	let biosphere = this.pickRandom2d6(this.biospheres);
-	let gravity = this.pickRandom2d6(this.gravities);
+	let gravity = this.generateGravityForPopulation(population, expandedPopulation && expandedPopulation.populationNumber);
 	let tags = generatedTags;
 	let planet = {
 		name: planetName,
@@ -254,6 +257,46 @@ WorldGenerator.describePlanet = function(planet, options) {
 WorldGenerator.pickRandom2d6 = function(list) {
 	var random = Math.floor(6*Math.random()) + Math.floor(6*Math.random());
 	return list[random];	
+}
+
+// Gravity is treated as a world condition, not an independent random 2d6 result.
+// Dense populations are kept at standard gravity; unusual gravity is confined to
+// low-population worlds and remains uncommon even there. The optional roll (0–100)
+// makes the table deterministic in regression tests; normal use relies on Math.random.
+WorldGenerator.generateGravityForPopulation = function(population, populationNumber, roll) {
+	var p = String(population || '').toLowerCase();
+	// Prefer the visible population category so editor rerolls stay coherent even
+	// before a form is saved. Expanded exact counts refine only unknown labels.
+	if (p === 'billions of inhabitants' || p === 'hundreds of millions of inhabitants' || p === 'several million inhabitants') return 'standard';
+	if (p !== 'failed colony' && p !== 'outpost' && p !== 'fewer than a million inhabitants' && p !== '10 thousand' && p !== '100 thousand') {
+		var count = Number(populationNumber);
+		if (populationNumber !== null && populationNumber !== undefined && populationNumber !== '' && Number.isFinite(count)) {
+			if (count >= 1000000) return 'standard';
+			p = count <= 10000 ? 'outpost' : 'fewer than a million inhabitants';
+		} else {
+			return 'standard';
+		}
+	}
+	var value = Number.isFinite(Number(roll)) ? Math.max(0, Math.min(99.999999, Number(roll))) : Math.random() * 100;
+	if (p === 'failed colony') {
+		if (value < 1) return 'zero';
+		if (value < 3) return 'nil';
+		if (value < 7) return 'high';
+		if (value < 15) return 'low';
+		return 'standard';
+	}
+	if (p === 'outpost') {
+		if (value < 0.5) return 'zero';
+		if (value < 2) return 'nil';
+		if (value < 4) return 'high';
+		if (value < 10) return 'low';
+		return 'standard';
+	}
+	if (value < 0.25) return 'zero';
+	if (value < 1) return 'nil';
+	if (value < 2) return 'high';
+	if (value < 5) return 'low';
+	return 'standard';
 }
 
 WorldGenerator.generateSuffix = function(string) {
@@ -3691,7 +3734,7 @@ WorldGenerator.planetTemplate = {
 		atmosphere:() => WorldGenerator.pickRandom2d6(WorldGenerator.atmospheres),
 		temperature:() => WorldGenerator.pickRandom2d6(WorldGenerator.temperatures),
 		biosphere:() => WorldGenerator.pickRandom2d6(WorldGenerator.biospheres),
-		gravity:() => WorldGenerator.pickRandom2d6(WorldGenerator.gravities),
+		gravity:(planet) => WorldGenerator.generateGravityForPopulation(planet && planet.population, planet && planet.populationNumber),
 		population:() => WorldGenerator.pickRandom2d6(WorldGenerator.populations).name,
 		techLevel:(planet) => planet && planet.generationMode === 'expanded' ? WorldGenerator.rollExpandedTech(planet.expandedPopulationType || 'Millions to Billions', planet.populationNumber) : WorldGenerator.pickRandom2d6(WorldGenerator.techlevels).value,
 		tag1:(planet) => GenUtil.pickRandom(WorldGenerator.tags.filter(tag => !planet || tag.name !== planet.tag2)).name,

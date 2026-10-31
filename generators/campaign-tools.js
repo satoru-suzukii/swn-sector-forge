@@ -23,14 +23,16 @@ var CampaignTools = (function() {
 
 	Tools.ensureIds = function(sector) {
 		sector.systems = Array.isArray(sector.systems) ? sector.systems : [];
+		var gridDims = typeof SectorGrid !== 'undefined' ? SectorGrid.dimensions(sector) : {columns:10,rows:12};
+		sector.grid = sector.grid || {columns:gridDims.columns, rows:gridDims.rows};
 		var used = new Set();
 		sector.systems.forEach(function(system, index) {
 			if (!system.id || used.has(system.id)) system.id = 'SYS-' + String(index + 1).padStart(2, '0');
 			used.add(system.id);
-			if (!Number.isFinite(Number(system.x))) system.x = index % 8;
-			if (!Number.isFinite(Number(system.y))) system.y = Math.floor(index / 8) % 10;
-			system.x = Math.max(0, Math.min(7, Math.round(Number(system.x))));
-			system.y = Math.max(0, Math.min(9, Math.round(Number(system.y))));
+			if (!Number.isFinite(Number(system.x))) system.x = index % gridDims.columns;
+			if (!Number.isFinite(Number(system.y))) system.y = Math.floor(index / gridDims.columns) % gridDims.rows;
+			system.x = Math.max(0, Math.min(gridDims.columns - 1, Math.round(Number(system.x))));
+			system.y = Math.max(0, Math.min(gridDims.rows - 1, Math.round(Number(system.y))));
 			system.planets = Array.isArray(system.planets) ? system.planets : [];
 			if (!Array.isArray(system.pointsOfInterest)) system.pointsOfInterest = [];
 			system.planets.forEach(function(planet, pIndex) {
