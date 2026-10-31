@@ -126,6 +126,25 @@ const coreTech = run("WorldGenerator.techlevels.map(x=>x.value).join(',')");
 assert(coreTech==='0,1,2,3,3,4,4,4,4,4+,5', `Unexpected Revised core tech table: ${coreTech}`);
 const populationRolls = run("WorldGenerator.populations.map(x=>x.name).join('|')");
 assert(populationRolls==='failed colony|outpost|fewer than a million inhabitants|fewer than a million inhabitants|several million inhabitants|several million inhabitants|several million inhabitants|hundreds of millions of inhabitants|hundreds of millions of inhabitants|billions of inhabitants|alien inhabitants', 'Unexpected Revised core population table');
+const gravityDeterministic = run(`JSON.stringify({
+  billions:WorldGenerator.generateGravityForPopulation('billions of inhabitants',null,0),
+  hundreds:WorldGenerator.generateGravityForPopulation('hundreds of millions of inhabitants',null,0),
+  several:WorldGenerator.generateGravityForPopulation('several million inhabitants',null,0),
+  lowPopZero:WorldGenerator.generateGravityForPopulation('fewer than a million inhabitants',null,0),
+  lowPopNil:WorldGenerator.generateGravityForPopulation('fewer than a million inhabitants',null,0.5),
+  lowPopHigh:WorldGenerator.generateGravityForPopulation('fewer than a million inhabitants',null,1.5),
+  lowPopLow:WorldGenerator.generateGravityForPopulation('fewer than a million inhabitants',null,3),
+  lowPopStandard:WorldGenerator.generateGravityForPopulation('fewer than a million inhabitants',null,6),
+  expandedBillion:WorldGenerator.generateGravityForPopulation('billions of inhabitants',2500000000,0),
+  expandedOutpost:WorldGenerator.generateGravityForPopulation('outpost',500,0)
+})`);
+const gravityCases = JSON.parse(gravityDeterministic);
+assert(gravityCases.billions==='standard'&&gravityCases.hundreds==='standard'&&gravityCases.several==='standard'&&gravityCases.expandedBillion==='standard', 'High-population worlds must remain standard gravity');
+assert(gravityCases.lowPopZero==='zero'&&gravityCases.lowPopNil==='nil'&&gravityCases.lowPopHigh==='high'&&gravityCases.lowPopLow==='low'&&gravityCases.lowPopStandard==='standard'&&gravityCases.expandedOutpost==='zero', 'Low-population gravity table thresholds are inconsistent');
+const gravitySample = run(`(()=>{const counts={standard:0,low:0,high:0,nil:0,zero:0},invalid=[];for(let i=0;i<20000;i++){const p=WorldGenerator.pickRandom2d6(WorldGenerator.populations).name;const g=WorldGenerator.generateGravityForPopulation(p);counts[g]=(counts[g]||0)+1;if(g!=='standard'&&!['failed colony','outpost','fewer than a million inhabitants'].includes(p))invalid.push(p);}return {counts,standardRate:counts.standard/20000,invalid:invalid.length};})()`);
+assert(gravitySample.standardRate>=0.95, 'Gravity generation should produce standard gravity on at least 95% of sampled core worlds: '+JSON.stringify(gravitySample));
+assert(gravitySample.invalid===0, 'Unusual gravity should be confined to low-population worlds: '+JSON.stringify(gravitySample));
+assert(run("WorldGenerator.planetTemplate.generators.gravity({population:'billions of inhabitants'})")==='standard', 'The planet editor gravity reroll must respect high population');
 const expandedTechTable = run('JSON.stringify(WorldGenerator.expandedTechTable)');
 const expectedExpandedTechTable = JSON.stringify([
   ['0','2','0','0','1'], ['0','3','0','0','2'], ['0','3+','1','1','3'],
@@ -252,7 +271,7 @@ const summary = {
   incompleteFactionBatches:stats.emptyFaction, incompleteThreatBatches:stats.emptyThreat,
   incompletePeopleBatches:stats.emptyPeople, supplementToolFailures:stats.extraToolErrors,
   worldTagCount:run('WorldGenerator.tags.length'), poiTableCount:run('WorldGenerator.pointsOfInterest.length'),
-  densityAudit, overall:failures.length?'FAIL':'PASS', failures
+  densityAudit, gravitySample, overall:failures.length?'FAIL':'PASS', failures
 };
 console.log(JSON.stringify(summary,null,2));
 if (failures.length) process.exitCode=1;
