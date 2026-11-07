@@ -1,117 +1,127 @@
 {
-  "project": "Sector Forge 1.0 — 10×12 grid and Sectors Without Number import foundation",
-  "validation_date": "2026-10-30",
-  "overall": "PASS",
-  "scope": "Validation of the updated package. This release adds a 10×12 grid and a tested SWN import foundation; it does not claim complete feature parity with every upstream entity editor or faction workflow. See FEATURE_PARITY.md.",
+  "project": "Sector Forge 1.0 \u2014 editor controls and export responsiveness update",
+  "validation_date": "2026-11-07",
+  "overall": "PASS_WITH_ENVIRONMENT_LIMITATION",
+  "scope": "Regression update from the 7 November round-trip-verified source. Covers dynamic editor randomise/revert behavior, campaign editor controls, save/export coalescing, map/campaign render hot paths, and off-thread export generation.",
   "static_integrity": {
     "javascript_syntax": {
       "result": "PASS",
-      "files_checked": 27,
+      "files_checked": 30,
       "command": "node --check applied to all .js and .cjs files"
     },
     "html_local_references": {
       "result": "PASS",
-      "local_reference_count": 30,
-      "missing_references": []
-    },
-    "fixtures_included": {
-      "result": "PASS",
-      "files": [
-        "tests/fixtures/lorre-dundrea-nu.csv",
-        "tests/fixtures/psavrosth-eta.csv",
-        "tests/fixtures/acheron-rho.csv"
-      ]
+      "local_reference_count": 31,
+      "missing_references": [],
+      "dynamic_worker_asset": "export-worker.js exists and is resolved relative to the same-origin document base URI"
     }
+  },
+  "editor_regressions": {
+    "result": "PASS",
+    "coverage": [
+      "faction field Randomise/Revert and Randomise All/Revert All",
+      "corporation name/markets/ownership/strategy/valuation",
+      "religion name/leadership/doctrine",
+      "political group name/leadership",
+      "alien name/type/body/lenses/government/motivation/humanRelations/techLevel/firstContact",
+      "faction asset, polity, market-good and generic campaign-story editors",
+      "boolean checkbox values, individual Revert and Revert All",
+      "table cancel does not run the saved callback"
+    ]
   },
   "swn_import_validation": {
     "result": "PASS",
-    "csv_export_fixtures": 3,
+    "csv_fixtures": 3,
     "csv_records_preserved": 553,
-    "csv_mapped_entities": {
-      "systems_and_black_holes": 74,
-      "planets": 92,
-      "additional_physical_survey_objects": 387
-    },
-    "fixtures": {
-      "lorre-dundrea-nu.csv": {
-        "records": 136,
-        "systems_and_black_holes_mapped": 19,
-        "worlds_mapped": 22,
-        "additional_survey_objects_mapped": 95
-      },
-      "psavrosth-eta.csv": {
-        "records": 125,
-        "systems_and_black_holes_mapped": 19,
-        "worlds_mapped": 24,
-        "additional_survey_objects_mapped": 82
-      },
-      "acheron-rho.csv": {
-        "records": 292,
-        "systems_and_black_holes_mapped": 36,
-        "worlds_mapped": 46,
-        "additional_survey_objects_mapped": 210
-      }
-    },
-    "native_json_fixture": {
-      "result": "PASS",
-      "coordinates": "SWN one-based entity coordinates converted to zero-based Forge coordinates; route/layer hex keys stay zero-based",
-      "coverage": [
-        "system/world hierarchy mapping",
-        "non-planet survey objects",
-        "native navigation path drawing",
-        "layer region conversion",
-        "faction source-record view",
-        "player-safe filtering for hidden regions"
-      ]
-    },
-    "notes": "The native JSON fixture is modeled on the upstream source exporter. A real JSON export from the currently hosted upstream app has not yet been added as a fixture."
+    "native_json_fixture": "PASS",
+    "acheron_rho_parent_graph": "PASS",
+    "out_of_order_parent_resolution": "PASS",
+    "enrichment_preserves_source": "PASS"
   },
   "generator_campaign_audit": {
     "result": "PASS",
     "core_generation_runs": 2000,
-    "core_generation_crashes": 0,
+    "core_crashes": 0,
     "expanded_generation_runs": 500,
-    "expanded_generation_crashes": 0,
+    "expanded_crashes": 0,
     "faction_simulation_sectors": 15,
     "faction_turns_per_sector": 12,
     "faction_turn_crashes": 0,
-    "faction_turn_events": 1228,
+    "faction_turn_events": 1229,
+    "invalid_population": 0,
+    "missing_ids": 0,
+    "duplicate_coordinates": 0,
+    "dangling_routes": 0,
+    "bad_diplomacy_refs": 0,
+    "bad_influence_refs": 0,
+    "bad_corporate_links": 0,
+    "bad_market_route_links": 0,
+    "supplement_tool_failures": 0,
+    "gravity_standard_rate": 0.9812,
+    "gravity_invalid": 0,
     "failures": []
   },
   "chromium_end_to_end": {
     "result": "PASS",
-    "runs_on_final_package": 1,
-    "test_groups": 11,
-    "browser": "Chromium",
+    "runs": 1,
+    "test_groups": 19,
     "mode": "Offline-inline mode (E2E_INLINE=1)",
+    "browser": "Chromium",
     "uncaught_browser_errors": 0,
     "coverage": [
-      "10×12 SVG map",
-      "CSV import and boundary coordinates",
-      "generation-density and linked data regressions",
-      "system survey rendering and responsive behavior",
-      "map editor and region editor",
-      "market and faction workflows",
-      "preserve-as-is and opt-in enrichment",
-      "native JSON coordinate normalization",
-      "source navigation route drawing",
-      "layer region conversion",
-      "source faction listing",
-      "player-safe hidden-region filtering"
+      "map generation and SVG",
+      "responsive system survey rendering",
+      "map edit workflows",
+      "markets and navigation",
+      "faction/corporation/religion/political group/alien Randomise/Revert",
+      "campaign record/asset/polity/market-good editor controls",
+      "import preserve/enrich modes",
+      "native JSON and hidden entity privacy",
+      "Acheron Rho 293-record import",
+      "GM JSON round-trip and compressed URL data preservation"
     ],
-    "environment_note": "Localhost browser navigation is blocked in this environment; the offline-inline browser suite exercised the app HTML/CSS/JavaScript and bundled local data without uncaught browser errors."
+    "performance_sample_on_acheron_rho": {
+      "systems": 36,
+      "source_records": 293,
+      "map_median_ms": 3.3,
+      "map_max_ms": 8.1,
+      "campaign_panels_median_ms": 0.5,
+      "campaign_panels_max_ms": 0.6,
+      "export_fallback_schedule_ms": 243.3,
+      "four_save_fallback_completion_ms": 940.6,
+      "worker_enabled_in_this_browser_run": false
+    },
+    "environment_note": "Normal browser navigation to both 127.0.0.1 and localhost was blocked by the Chromium environment policy. Offline-inline mode exercised the application and its synchronous compatibility fallback; it cannot construct the normal same-origin browser worker."
+  },
+  "export_worker": {
+    "result": "PASS",
+    "execution": "Node worker_threads using the exact export-worker.js source",
+    "fixture": "Acheron Rho native SWN JSON",
+    "systems": 36,
+    "source_records": 293,
+    "main_thread_dispatch_ms": 4.4,
+    "worker_completion_ms": 347.7,
+    "gm_archive_records_preserved": 293,
+    "player_json_matches_app_censorSector_exactly": true,
+    "gm_and_player_blobs_verified": true,
+    "gm_and_player_compressed_links_decompress": true
   },
   "zip_integrity": {
     "result": "PASS",
     "root_layout": "The archive extracts into swn-sector-forge-main/",
-    "tested_after_extraction": [
-      "archive CRC check",
-      "JavaScript syntax check",
-      "CSV/native JSON import validation",
-      "generator/campaign audit",
-      "Chromium end-to-end suite"
+    "archive_crc": "PASS \u2014 unzip -t reported no compressed-data errors",
+    "extracted_tests": [
+      "30 JavaScript/CommonJS syntax checks",
+      "node tests/import-validation.cjs",
+      "node tests/run-audit.cjs",
+      "node tests/export-worker.cjs",
+      "E2E_INLINE=1 node tests/e2e.cjs"
     ],
-    "final_extracted_tests": "All passed; see test logs summarized above."
+    "extracted_test_results": "All checks passed from the extracted archive; Chromium suite reported zero uncaught browser JavaScript errors."
   },
-  "feature_parity_note": "Original native JSON payloads and source records are kept in the GM archive. Several upstream entity types are visible as survey objects and/or source records, but all entity-specific editors are not yet implemented. Imported navigation paths are separate from Forge trade routes; layers are flattened into Forge's region model; imported SWN factions remain reference records instead of active Forge faction-simulation objects. See FEATURE_PARITY.md."
+  "limitations": [
+    "The same-origin browser Worker path was not exercised inside Chromium because this environment blocks local HTTP navigation. The exact worker source was executed on a separate Node worker thread and compared against the live app privacy implementation.",
+    "The synchronous export fallback remains available for file:// previews or restricted browsers and can still pause on large sectors.",
+    "Performance varies by browser/device and sector size; this does not prove that no further bugs or freezes are possible."
+  ]
 }

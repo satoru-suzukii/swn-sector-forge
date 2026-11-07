@@ -26,6 +26,7 @@ const assert = (condition, message) => { if (!condition) failures.push(message);
 const coreRuns = Math.max(100, Number(process.env.SWN_CORE_RUNS || 2000));
 const expandedRuns = Math.max(50, Number(process.env.SWN_EXPANDED_RUNS || 500));
 const factionSectors = Math.max(1, Number(process.env.SWN_FACTION_SECTORS || 15));
+const factionTurns = Math.max(1, Number(process.env.SWN_FACTION_TURNS || 12));
 const stats = { runs:coreRuns, crashes:0, systems:0, planets:0, duplicateCoords:0, emptySystems:0, duplicateTags:0, missingBodies:0, missingTerrain:0, missingDescriptions:0, invalidPopulation:0, missingIds:0, routesOver3:0, danglingRoutes:0, marketsMissingWorld:0, badDiplomacyRefs:0, badInfluenceRefs:0, badCorporateLinks:0, badMarketRouteLinks:0, emptyAdventure:0, emptyFaction:0, emptyThreat:0, emptyPeople:0, extraToolErrors:0 };
 const goodPopulation = new Set(['failed colony','outpost','fewer than a million inhabitants','several million inhabitants','hundreds of millions of inhabitants','billions of inhabitants','alien inhabitants']);
 for (let i=0; i<stats.runs; i++) {
@@ -186,7 +187,7 @@ for (let i=0; i<factionSectors; i++) {
     const systems = run('WorldGenerator.generate()');
     ctx.__turnSector = {systems, politicalGroups:run('PoliticalGroupGenerator.generate()'), corporations:run('CorporationGenerator.generate()'), religions:run('ReligionGenerator.generate()')};
     run('CampaignTools.enrichSector(globalThis.__turnSector, false)');
-    for (let t=0; t<12; t++) factionTurnEvents += run('CampaignTools.advanceFactionTurn(globalThis.__turnSector)').length;
+    for (let t=0; t<factionTurns; t++) factionTurnEvents += run('CampaignTools.advanceFactionTurn(globalThis.__turnSector)').length;
     const factions = ctx.__turnSector.factions;
     const assetIds = new Set();
     for (const faction of factions) {
@@ -264,7 +265,7 @@ assert(stats.emptyThreat===0, 'Threat data incomplete');
 assert(stats.emptyPeople===0, 'People data incomplete');
 assert(stats.extraToolErrors===0, `Supplement tool failures: ${stats.extraToolErrors}`);
 const summary = {
-  stressRuns:stats.runs, crashes:stats.crashes, expandedStressRuns:expandedRuns, expandedCrashes, expandedMissingEstimate, expandedInvalidTech, legacyMigrationFailures, playerMigrationLeaks, factionSimulationSectors:factionSectors, factionTurnsPerSector:12, factionTurnCrashes, factionTurnEvents, factionBadAssets, factionBadCredits,
+  stressRuns:stats.runs, crashes:stats.crashes, expandedStressRuns:expandedRuns, expandedCrashes, expandedMissingEstimate, expandedInvalidTech, legacyMigrationFailures, playerMigrationLeaks, factionSimulationSectors:factionSectors, factionTurnsPerSector:factionTurns, factionTurnCrashes, factionTurnEvents, factionBadAssets, factionBadCredits,
   averageSystems:+(stats.systems/stats.runs).toFixed(2), averagePlanets:+(stats.planets/stats.runs).toFixed(2),
   duplicateCoords:stats.duplicateCoords, emptySystems:stats.emptySystems, duplicateTagPairs:stats.duplicateTags,
   missingBodies:stats.missingBodies, missingTerrain:stats.missingTerrain,

@@ -349,6 +349,143 @@ async function main() {
     await evaluate("(()=>{const row=[...document.querySelectorAll('#factions-output tbody tr')].find(r=>r.textContent.includes('Wayfarer Cooperative'));row.querySelector('button').click();const modal=document.querySelector('.dynmodal-container .dynedit');const name=[...modal.querySelectorAll('tr')].find(r=>r.cells[0]?.textContent.trim()==='name:');name.querySelector('textarea').value='Wayfarer Compact';[...modal.querySelectorAll('.textbutton')].find(e=>e.textContent.trim()==='(Save)').click()})()");
     assert(await evaluate("App.currentSector.factions.some(f=>f.name==='Wayfarer Compact')"),'A newly created faction could not be edited after saving.');
     console.log('PASS: custom faction creation, editable custom fields, base placement, diplomacy links, and subsequent editing.');
+
+    // Regression checks for editor randomise/revert across factions, corporations,
+    // campaign records, and boolean controls (checkboxes use .checked, not .value).
+    const factionRerollCheck = await evaluate(`(()=>{
+      const row=[...document.querySelectorAll('#factions-output tbody tr')].find(r=>r.textContent.includes('Wayfarer Compact'));
+      row.querySelector('button').click();
+      const modal=document.querySelector('.dynmodal-container .dynedit');
+      const field=(name)=>[...modal.querySelectorAll('tr')].find(r=>r.cells[0]?.textContent.trim()===name+':');
+      const randomize=(name)=>{const b=field(name)?.querySelector('[aria-label="Randomize '+name+'"]');if(!b)throw new Error('Missing faction randomizer: '+name);b.click();};
+      const before={name:field('name').querySelector('textarea').value,goal:field('goal').querySelector('textarea').value,force:field('force').querySelector('input').value,cunning:field('cunning').querySelector('input').value,wealth:field('wealth').querySelector('input').value};
+      randomize('name');
+      const rerolledName=field('name').querySelector('textarea').value;
+      field('name').querySelector('[aria-label="Revert name"]').click();
+      const singleRevert=field('name').querySelector('textarea').value===before.name;
+      modal.querySelectorAll('.dynedit-toolbar-button')[0].click();
+      const changedAfterAll=['name','goal','force','cunning','wealth','type','scale'].some(k=>{
+        const r=field(k), c=r?.querySelector('textarea, input, select');
+        return c && (c.type==='checkbox'?c.checked:String(c.value))!==String(before[k]??({name:before.name,goal:before.goal,force:before.force,cunning:before.cunning,wealth:before.wealth}[k]??''));
+      });
+      modal.querySelectorAll('.dynedit-toolbar-button')[1].click();
+      const allReverted=field('name').querySelector('textarea').value===before.name&&field('goal').querySelector('textarea').value===before.goal&&field('force').querySelector('input').value===before.force&&field('cunning').querySelector('input').value===before.cunning&&field('wealth').querySelector('input').value===before.wealth;
+      modal.querySelectorAll('.dynedit-toolbar-button')[2].click();
+      return {randomizerCount:modal.querySelectorAll('[aria-label^="Randomize "]').length,rerolledName,singleRevert,changedAfterAll,allReverted,saved:App.currentSector.factions.some(f=>f.name==='Wayfarer Compact')};
+    })()`);
+    assert(factionRerollCheck.randomizerCount>=10&&factionRerollCheck.rerolledName&&factionRerollCheck.rerolledName!=='Wayfarer Compact'&&factionRerollCheck.singleRevert&&factionRerollCheck.changedAfterAll&&factionRerollCheck.allReverted&&factionRerollCheck.saved,'Faction randomise/revert controls failed: '+JSON.stringify(factionRerollCheck));
+
+    await evaluate("[...document.querySelectorAll('[role=tab]')].find(t=>t.textContent.trim()==='Corporations').click();document.querySelector('#corporations-output tbody tr .edit-cell .textbutton').click()");
+    const corporationRerollCheck = await evaluate(`(()=>{
+      const modal=document.querySelector('.dynmodal-container .dynedit');
+      const field=(name)=>[...modal.querySelectorAll('tr')].find(r=>r.cells[0]?.textContent.trim()===name+':');
+      const before={name:field('name').querySelector('textarea').value,markets:field('markets').querySelector('textarea').value,ownership:field('ownership').querySelector('select').value,strategy:field('strategy').querySelector('select').value,valuation:field('valuation').querySelector('select').value};
+      const names=['name','markets','ownership','strategy','valuation'];
+      const missing=names.filter(name=>!field(name)?.querySelector('[aria-label="Randomize '+name+'"]'));
+      field('name').querySelector('[aria-label="Randomize name"]').click();
+      const rerolledName=field('name').querySelector('textarea').value;
+      field('name').querySelector('[aria-label="Revert name"]').click();
+      const singleRevert=field('name').querySelector('textarea').value===before.name;
+      modal.querySelectorAll('.dynedit-toolbar-button')[0].click();
+      const allChanged=names.some(name=>{const c=field(name).querySelector('textarea,select');return c.value!==before[name];});
+      modal.querySelectorAll('.dynedit-toolbar-button')[1].click();
+      const allReverted=names.every(name=>field(name).querySelector('textarea,select').value===before[name]);
+      modal.querySelectorAll('.dynedit-toolbar-button')[2].click();
+      return {missing,rerolledName,singleRevert,allChanged,allReverted,savedName:App.currentSector.corporations[0].name};
+    })()`);
+    assert(corporationRerollCheck.missing.length===0&&corporationRerollCheck.rerolledName&&corporationRerollCheck.rerolledName!==corporationRerollCheck.savedName&&corporationRerollCheck.singleRevert&&corporationRerollCheck.allChanged&&corporationRerollCheck.allReverted,'Corporation randomise/revert controls failed: '+JSON.stringify(corporationRerollCheck));
+
+    // Verify the other directory-backed editors received their own generator
+    // templates and that every field can be individually reverted.
+    const additionalEditorChecks = await evaluate(`(()=>{
+      const specs=[
+        {tab:'Religions',output:'religions-output',fields:['name','leadership','doctrine']},
+        {tab:'Political Groups',output:'political-groups-output',fields:['name','leadership']},
+        {tab:'Aliens',output:'aliens-output',fields:['name','type','body','lenses','government','motivation','humanRelations','techLevel','firstContact']}
+      ];
+      function control(row){return row?.querySelector('textarea,input,select');}
+      function value(el){return el?.type==='checkbox'?el.checked:el?.value;}
+      const results=[];
+      for(const spec of specs){
+        const tab=[...document.querySelectorAll('[role=tab]')].find(t=>t.textContent.trim()===spec.tab);
+        if(!tab)throw new Error('Missing '+spec.tab+' tab'); tab.click();
+        const recordRow=document.querySelector('#'+spec.output+' tbody tr');
+        if(!recordRow)throw new Error('No '+spec.tab+' records to edit');
+        const edit=recordRow.querySelector('.edit-cell .textbutton');
+        if(!edit)throw new Error(spec.tab+' edit control missing'); edit.click();
+        const modal=document.querySelector('.dynmodal-container .dynedit');
+        const field=name=>[...modal.querySelectorAll('tr')].find(r=>r.cells[0]?.textContent.trim()===name+':');
+        const before={};
+        const missing=[];
+        for(const name of spec.fields){
+          const row=field(name), el=control(row);
+          if(!el||!row.querySelector('[aria-label="Randomize '+name+'"]')){missing.push(name);continue;}
+          before[name]=value(el);
+          row.querySelector('[aria-label="Randomize '+name+'"]').click();
+          row.querySelector('[aria-label="Revert '+name+'"]').click();
+          if(value(control(row))!==before[name])throw new Error(spec.tab+' field Revert failed for '+name);
+        }
+        if(missing.length)throw new Error(spec.tab+' missing randomizers: '+missing.join(', '));
+        modal.querySelectorAll('.dynedit-toolbar-button')[0].click();
+        modal.querySelectorAll('.dynedit-toolbar-button')[1].click();
+        const allReverted=spec.fields.every(name=>value(control(field(name)))===before[name]);
+        modal.querySelectorAll('.dynedit-toolbar-button')[2].click();
+        if(!allReverted)throw new Error(spec.tab+' Revert All did not restore original field values');
+        results.push({tab:spec.tab,fields:spec.fields.length,individualReverts:spec.fields.length,allReverted});
+      }
+      return results;
+    })()`);
+    assert(additionalEditorChecks.length===3&&additionalEditorChecks.every(x=>x.allReverted),'Religion/political-group/alien editor randomise/revert regression failed: '+JSON.stringify(additionalEditorChecks));
+
+    const campaignEditorChecks = await evaluate(`(()=>{
+      const specs=[
+        {label:'Faction asset',record:{id:'A-TEST',ownerFactionId:'F-TEST',type:'Base of Influence',name:'Test Base',stat:'force',rating:3,minimumRating:0,hp:5,maintenance:1,cost:4,income:1,active:true,stealthed:false},fields:['type','name','stat','rating','minimumRating','hp','maintenance','cost','income','active','stealthed']},
+        {label:'Polity',record:{id:'P-TEST',name:'Test Polity',memberSystemIds:[],government:'Federated republic',policy:'preserve peace',stability:3},fields:['name','government','policy','stability']},
+        {label:'Market good',record:{id:'G-TEST',name:'Test Good',category:'Technology',supply:'Common',priceIndex:100,basePrice:200,localPrice:200,note:'Original note'},fields:['supply','priceIndex','localPrice','note']},
+        {label:'Campaign story',record:{id:'S-TEST',name:'Test Story',title:'Original title',objective:'Original objective',motive:'Original motive',status:'Active',notes:'Original notes'},fields:['name','title','objective','motive','status','notes']}
+      ];
+      function control(row){return row?.querySelector('textarea,input,select');}
+      function value(el){if(!el)return undefined;if(el.type==='checkbox')return !!el.checked;if(el.type==='number')return el.value===''?null:Number(el.value);return el.value;}
+      const results=[];
+      for(const spec of specs){
+        DynEdit.edit('Regression '+spec.label,spec.record,App.buildCampaignEditTemplate(spec.label,spec.record,[]),function(){});
+        const modal=document.querySelector('.dynmodal-container .dynedit');
+        const field=name=>[...modal.querySelectorAll('tr')].find(r=>r.cells[0]?.textContent.trim()===name+':');
+        const before={};
+        for(const name of spec.fields){
+          const row=field(name),el=control(row),randomize=row?.querySelector('[aria-label="Randomize '+name+'"]'),revert=row?.querySelector('[aria-label="Revert '+name+'"]');
+          if(!el||!randomize||!revert)throw new Error(spec.label+' missing randomize/revert for '+name);
+          before[name]=value(el); randomize.click(); revert.click();
+          if(value(control(field(name)))!==before[name])throw new Error(spec.label+' individual Revert failed for '+name);
+        }
+        modal.querySelectorAll('.dynedit-toolbar-button')[0].click();
+        modal.querySelectorAll('.dynedit-toolbar-button')[1].click();
+        const allReverted=spec.fields.every(name=>value(control(field(name)))===before[name]);
+        modal.querySelectorAll('.dynedit-toolbar-button')[2].click();
+        if(!allReverted)throw new Error(spec.label+' Revert All failed');
+        results.push({label:spec.label,fields:spec.fields.length,allReverted});
+      }
+      return results;
+    })()`);
+    assert(campaignEditorChecks.length===4&&campaignEditorChecks.every(x=>x.allReverted),'Campaign asset/polity/market/story editor randomise/revert regression failed: '+JSON.stringify(campaignEditorChecks));
+
+    const checkboxRevertCheck = await evaluate(`(()=>{
+      const record={enabled:true,score:4,label:'Original'};
+      DynEdit.edit('Editor checkbox regression',record,{generators:{enabled:()=>false,score:()=>9,label:()=> 'Randomized'}},function(){});
+      const modal=document.querySelector('.dynmodal-container .dynedit');
+      const row=(name)=>[...modal.querySelectorAll('tr')].find(r=>r.cells[0]?.textContent.trim()===name+':');
+      row('enabled').querySelector('[aria-label="Randomize enabled"]').click();
+      const randomizeBoolean=!row('enabled').querySelector('input').checked;
+      row('enabled').querySelector('[aria-label="Revert enabled"]').click();
+      const fieldRevert=row('enabled').querySelector('input').checked;
+      modal.querySelectorAll('.dynedit-toolbar-button')[0].click();
+      modal.querySelectorAll('.dynedit-toolbar-button')[1].click();
+      const allRevert=row('enabled').querySelector('input').checked&&row('score').querySelector('input').value==='4'&&row('label').querySelector('textarea').value==='Original';
+      modal.querySelectorAll('.dynedit-toolbar-button')[2].click();
+      return {randomizeBoolean,fieldRevert,allRevert,record};
+    })()`);
+    assert(checkboxRevertCheck.randomizeBoolean&&checkboxRevertCheck.fieldRevert&&checkboxRevertCheck.allRevert&&checkboxRevertCheck.record.enabled===true&&checkboxRevertCheck.record.score===4&&checkboxRevertCheck.record.label==='Original','Editor checkbox/randomize/revert regression failed: '+JSON.stringify(checkboxRevertCheck));
+    console.log('PASS: field and all-field randomise/revert for factions, corporations, religions, political groups and aliens, plus campaign assets/polities/market goods/story records and checkbox value restoration.');
     const assetBefore=await evaluate("(()=>{const a=App.currentSector.factions.flatMap(f=>f.assets)[0];return {id:a.id,location:a.locationSystemId,active:a.active}})()");
     await evaluate("document.querySelector('#assets-output .asset-op').click()");
     const assetAfterMove=await evaluate("(()=>{const a=App.currentSector.factions.flatMap(f=>f.assets).find(a=>a.id==="+JSON.stringify(assetBefore.id)+");return {location:a.locationSystemId,owner:a.ownerFactionId,valid:App.currentSector.systems.some(s=>s.id===a.locationSystemId)}})()");
@@ -430,11 +567,40 @@ async function main() {
     const acheronBrowser=await evaluate(acheronExpression);
     assert(acheronBrowser.blackHoles.length===3&&acheronBrowser.blackHoles.every(system=>system.systemType==='blackHole'&&system.primary==='Black hole'&&system.ordinaryStars===0)&&acheronBrowser.records===293&&acheronBrowser.systems===36&&acheronBrowser.planets===46&&acheronBrowser.surveyObjects===210&&acheronBrowser.parentChecks.every(check=>check.actual===check.expected)&&acheronBrowser.researchDetailsPresent,'Acheron Rho full browser import failed record counts or parent graph validation: '+JSON.stringify(acheronBrowser));
     console.log('PASS: full Acheron Rho JSON import in Chromium; 293 source records, 36 top-level systems, 46 planets, 210 survey objects, and all five repaired asteroid-base parents.');
+    const responsiveness = await evaluate(`(async()=>{
+      const sector=App.currentSector, svg=document.querySelector('#hexmap');
+      function sample(fn,count){const values=[];for(let i=0;i<count;i++){const start=performance.now();fn();values.push(Number((performance.now()-start).toFixed(2)));}values.sort((a,b)=>a-b);return {medianMs:values[Math.floor(values.length/2)],maxMs:Math.max(...values),samples:values};}
+      const map=sample(()=>Hexmap.render(svg,sector,Hexmap._state&&Hexmap._state.selectedSystem),8);
+      const campaign=sample(()=>App.renderCampaignPanels(sector),4);
+      const start=performance.now();
+      for(let i=0;i<4;i++) App.persistSector(sector);
+      await App.waitForExports();
+      const exportCompletionMs=Number((performance.now()-start).toFixed(2));
+      return {systems:sector.systems.length,sourceRecords:sector.swnImport.records.length,map,campaign,exportSchedulingMs:sample(()=>App.persistSector(sector),2),exportCompletionMs,workerEnabled:!!App._exportWorker};
+    })()`);
+    assert(responsiveness.map.maxMs<1500&&responsiveness.campaign.maxMs<2500&&responsiveness.exportSchedulingMs.maxMs<3000&&responsiveness.exportCompletionMs<10000,'Responsiveness smoke-test exceeded the generous freeze thresholds: '+JSON.stringify(responsiveness));
+    console.log('PASS: responsiveness smoke test on the 36-system / 293-record imported sector: '+JSON.stringify(responsiveness));
+    if (responsiveness.workerEnabled) {
+      const workerQueue = await evaluate(`(async()=>{
+        const sector=App.currentSector, startSeq=App._exportSequence, count=25;
+        for(let i=1;i<=count;i++){sector.__workerQueueMarker='QUEUE_'+i;App.persistSector(sector);}
+        const pendingLinksDisabled=!document.querySelector('#export-json-gm').getAttribute('href')&&document.querySelector('#export-json-gm').getAttribute('aria-disabled')==='true';
+        await App.waitForExports();
+        const gm=JSON.parse(await(await fetch(document.querySelector('#export-json-gm').href)).text());
+        const result={count,sequenceDelta:App._exportSequence-startSeq,latestMarker:gm.__workerQueueMarker,pendingLinksDisabled,workerBusy:App._exportWorkerBusy,queueEmpty:!App._queuedExport,downloadReady:!!document.querySelector('#export-json-gm').href};
+        delete sector.__workerQueueMarker;App.persistSector(sector);await App.waitForExports();
+        return result;
+      })()`);
+      assert(workerQueue.sequenceDelta===25&&workerQueue.latestMarker==='QUEUE_25'&&workerQueue.pendingLinksDisabled&&!workerQueue.workerBusy&&workerQueue.queueEmpty&&workerQueue.downloadReady,'Worker save coalescing/stale-link regression failed: '+JSON.stringify(workerQueue));
+      console.log('PASS: 25 rapid worker-backed saves coalesce to the newest sector snapshot; stale downloads stay disabled until completion. '+JSON.stringify(workerQueue));
+    } else {
+      console.log('SKIP: browser Worker queue stress is unavailable in this fallback-only context; synchronous export fallback is covered by the round-trip checks.');
+    }
     // Sector Forge native GM archive round-trip: the app's own exported JSON must
     // preserve edits, custom records, campaign relationships, and original SWN source.
     const rtSource=JSON.parse(fs.readFileSync(path.join(ROOT,'tests','fixtures','acheron-rho-native-2026-10-30.json'),'utf8'));
-    const rtSetup=await evaluate(`(()=>{const s=SwnImport.fromJSON(${JSON.stringify(rtSource)},'Acheron Rho.json','preserve');App.displaySector(s);const sys=App.currentSector.systems.find(x=>x.planets&&x.planets.length);const p=sys.planets[0];p.name='ROUNDTRIP_EDITED_WORLD';p.techLevel='TL5';p.atmosphere='ROUNDTRIP_BREATHABLE';p.description='ROUNDTRIP_DESCRIPTION_SENTINEL';p.customCampaignNote='ROUNDTRIP_CUSTOM_WORLD_NOTE';sys.pointsOfInterest=sys.pointsOfInterest||[];sys.pointsOfInterest.push({id:'ROUNDTRIP-POI',name:'ROUNDTRIP_CUSTOM_SITE',type:'Research complex'});sys.bodies=sys.bodies||[];sys.bodies.push({id:'ROUNDTRIP-BODY',name:'ROUNDTRIP_ORBITAL_STATION',type:'Orbital station',bodyClass:'N',isGeneratedWorld:false});App.currentSector.factions=App.currentSector.factions||[];App.currentSector.factions.push({id:'ROUNDTRIP-FACTION',name:'ROUNDTRIP_CUSTOM_FACTION',type:'Political',scale:'Sector',force:4,cunning:5,wealth:3,goal:'Protect the edited world',homeworldSystemId:sys.id,homeworld:sys.name,assets:[],rivals:[],turnLog:[]});App.currentSector.gmNotes='ROUNDTRIP_GM_NOTE_SENTINEL';App.persistSector(App.currentSector);return {sys:sys.id,planet:p.id,records:App.currentSector.swnImport.records.length};})()`);
-    const rt=await evaluate(`(async()=>{const gm=JSON.parse(await(await fetch(document.querySelector('#export-json-gm').href)).text());const player=JSON.parse(await(await fetch(document.querySelector('#export-json-player').href)).text());const sys=${JSON.stringify(rtSetup.sys)},pid=${JSON.stringify(rtSetup.planet)};const world=x=>x.systems.flatMap(s=>s.planets||[]).find(p=>p.id===pid);const gs=gm.systems.find(s=>s.id===sys),ps=player.systems.find(s=>s.id===sys);const gmCheck={world:world(gm),poi:(gs.pointsOfInterest||[]).some(x=>x.name==='ROUNDTRIP_CUSTOM_SITE'),body:(gs.bodies||[]).some(x=>x.name==='ROUNDTRIP_ORBITAL_STATION'),faction:(gm.factions||[]).some(x=>x.id==='ROUNDTRIP-FACTION'),gmNote:gm.gmNotes,sourceCount:gm.swnImport&&gm.swnImport.records.length};const playerCheck={world:world(player),hasSource:!!player.swnImport,hasGMNote:Object.prototype.hasOwnProperty.call(player,'gmNotes'),hiddenSecret:JSON.stringify(player).includes('SECRET_'),redactsPoi:!(ps.pointsOfInterest||[]).some(x=>x.name==='ROUNDTRIP_CUSTOM_SITE'),redactsCustomBody:!(ps.bodies||[]).some(x=>x.name==='ROUNDTRIP_ORBITAL_STATION'),redactsCampaignFactions:!(player.factions||[]).some(x=>x.id==='ROUNDTRIP-FACTION')};App.displaySector(gm);App.persistSector(App.currentSector);const gm2=JSON.parse(await(await fetch(document.querySelector('#export-json-gm').href)).text());const g2=world(gm2);const compressed=App.compressSector(gm2);const urlRoundTrip=App.decompressSector(compressed);return {gm:{name:gmCheck.world&&gmCheck.world.name,tech:gmCheck.world&&gmCheck.world.techLevel,atmosphere:gmCheck.world&&gmCheck.world.atmosphere,description:gmCheck.world&&gmCheck.world.description,customNote:gmCheck.world&&gmCheck.world.customCampaignNote,poi:gmCheck.poi,body:gmCheck.body,faction:gmCheck.faction,gmNote:gmCheck.gmNote,sourceCount:gmCheck.sourceCount},gmReload:{name:g2&&g2.name,tech:g2&&g2.techLevel,customNote:g2&&g2.customCampaignNote,poi:(gm2.systems.find(s=>s.id===sys).pointsOfInterest||[]).some(x=>x.name==='ROUNDTRIP_CUSTOM_SITE'),body:(gm2.systems.find(s=>s.id===sys).bodies||[]).some(x=>x.name==='ROUNDTRIP_ORBITAL_STATION'),faction:(gm2.factions||[]).some(x=>x.id==='ROUNDTRIP-FACTION'),gmNote:gm2.gmNotes,sourceCount:gm2.swnImport&&gm2.swnImport.records.length},player:{name:playerCheck.world&&playerCheck.world.name,tech:playerCheck.world&&playerCheck.world.techLevel,atmosphere:playerCheck.world&&playerCheck.world.atmosphere,hasSource:playerCheck.hasSource,hasGMNote:playerCheck.hasGMNote,hiddenSecret:playerCheck.hiddenSecret,redactsPoi:playerCheck.redactsPoi,redactsCustomBody:playerCheck.redactsCustomBody,redactsCampaignFactions:playerCheck.redactsCampaignFactions},url:{world:world(urlRoundTrip)&&world(urlRoundTrip).name,tech:world(urlRoundTrip)&&world(urlRoundTrip).techLevel,poi:(urlRoundTrip.systems.find(s=>s.id===sys).pointsOfInterest||[]).some(x=>x.name==='ROUNDTRIP_CUSTOM_SITE'),faction:(urlRoundTrip.factions||[]).some(x=>x.id==='ROUNDTRIP-FACTION'),sourceCount:urlRoundTrip.swnImport&&urlRoundTrip.swnImport.records.length}}})()`);
+    const rtSetup=await evaluate(`(async()=>{const s=SwnImport.fromJSON(${JSON.stringify(rtSource)},'Acheron Rho.json','preserve');App.displaySector(s);const sys=App.currentSector.systems.find(x=>x.planets&&x.planets.length);const p=sys.planets[0];p.name='ROUNDTRIP_EDITED_WORLD';p.techLevel='TL5';p.atmosphere='ROUNDTRIP_BREATHABLE';p.description='ROUNDTRIP_DESCRIPTION_SENTINEL';p.customCampaignNote='ROUNDTRIP_CUSTOM_WORLD_NOTE';sys.pointsOfInterest=sys.pointsOfInterest||[];sys.pointsOfInterest.push({id:'ROUNDTRIP-POI',name:'ROUNDTRIP_CUSTOM_SITE',type:'Research complex'});sys.bodies=sys.bodies||[];sys.bodies.push({id:'ROUNDTRIP-BODY',name:'ROUNDTRIP_ORBITAL_STATION',type:'Orbital station',bodyClass:'N',isGeneratedWorld:false});App.currentSector.factions=App.currentSector.factions||[];App.currentSector.factions.push({id:'ROUNDTRIP-FACTION',name:'ROUNDTRIP_CUSTOM_FACTION',type:'Political',scale:'Sector',force:4,cunning:5,wealth:3,goal:'Protect the edited world',homeworldSystemId:sys.id,homeworld:sys.name,assets:[],rivals:[],turnLog:[]});App.currentSector.gmNotes='ROUNDTRIP_GM_NOTE_SENTINEL';App.persistSector(App.currentSector);await App.waitForExports();return {sys:sys.id,planet:p.id,records:App.currentSector.swnImport.records.length};})()`);
+    const rt=await evaluate(`(async()=>{const gm=JSON.parse(await(await fetch(document.querySelector('#export-json-gm').href)).text());const player=JSON.parse(await(await fetch(document.querySelector('#export-json-player').href)).text());const sys=${JSON.stringify(rtSetup.sys)},pid=${JSON.stringify(rtSetup.planet)};const world=x=>x.systems.flatMap(s=>s.planets||[]).find(p=>p.id===pid);const gs=gm.systems.find(s=>s.id===sys),ps=player.systems.find(s=>s.id===sys);const gmCheck={world:world(gm),poi:(gs.pointsOfInterest||[]).some(x=>x.name==='ROUNDTRIP_CUSTOM_SITE'),body:(gs.bodies||[]).some(x=>x.name==='ROUNDTRIP_ORBITAL_STATION'),faction:(gm.factions||[]).some(x=>x.id==='ROUNDTRIP-FACTION'),gmNote:gm.gmNotes,sourceCount:gm.swnImport&&gm.swnImport.records.length};const playerCheck={world:world(player),hasSource:!!player.swnImport,hasGMNote:Object.prototype.hasOwnProperty.call(player,'gmNotes'),hiddenSecret:JSON.stringify(player).includes('SECRET_'),redactsPoi:!(ps.pointsOfInterest||[]).some(x=>x.name==='ROUNDTRIP_CUSTOM_SITE'),redactsCustomBody:!(ps.bodies||[]).some(x=>x.name==='ROUNDTRIP_ORBITAL_STATION'),redactsCampaignFactions:!(player.factions||[]).some(x=>x.id==='ROUNDTRIP-FACTION')};App.displaySector(gm);App.persistSector(App.currentSector);await App.waitForExports();const gm2=JSON.parse(await(await fetch(document.querySelector('#export-json-gm').href)).text());const g2=world(gm2);const compressed=App.compressSector(gm2);const urlRoundTrip=App.decompressSector(compressed);return {gm:{name:gmCheck.world&&gmCheck.world.name,tech:gmCheck.world&&gmCheck.world.techLevel,atmosphere:gmCheck.world&&gmCheck.world.atmosphere,description:gmCheck.world&&gmCheck.world.description,customNote:gmCheck.world&&gmCheck.world.customCampaignNote,poi:gmCheck.poi,body:gmCheck.body,faction:gmCheck.faction,gmNote:gmCheck.gmNote,sourceCount:gmCheck.sourceCount},gmReload:{name:g2&&g2.name,tech:g2&&g2.techLevel,customNote:g2&&g2.customCampaignNote,poi:(gm2.systems.find(s=>s.id===sys).pointsOfInterest||[]).some(x=>x.name==='ROUNDTRIP_CUSTOM_SITE'),body:(gm2.systems.find(s=>s.id===sys).bodies||[]).some(x=>x.name==='ROUNDTRIP_ORBITAL_STATION'),faction:(gm2.factions||[]).some(x=>x.id==='ROUNDTRIP-FACTION'),gmNote:gm2.gmNotes,sourceCount:gm2.swnImport&&gm2.swnImport.records.length},player:{name:playerCheck.world&&playerCheck.world.name,tech:playerCheck.world&&playerCheck.world.techLevel,atmosphere:playerCheck.world&&playerCheck.world.atmosphere,hasSource:playerCheck.hasSource,hasGMNote:playerCheck.hasGMNote,hiddenSecret:playerCheck.hiddenSecret,redactsPoi:playerCheck.redactsPoi,redactsCustomBody:playerCheck.redactsCustomBody,redactsCampaignFactions:playerCheck.redactsCampaignFactions},url:{world:world(urlRoundTrip)&&world(urlRoundTrip).name,tech:world(urlRoundTrip)&&world(urlRoundTrip).techLevel,poi:(urlRoundTrip.systems.find(s=>s.id===sys).pointsOfInterest||[]).some(x=>x.name==='ROUNDTRIP_CUSTOM_SITE'),faction:(urlRoundTrip.factions||[]).some(x=>x.id==='ROUNDTRIP-FACTION'),sourceCount:urlRoundTrip.swnImport&&urlRoundTrip.swnImport.records.length}}})()`);
     assert(rt.gm.name==='ROUNDTRIP_EDITED_WORLD'&&rt.gm.tech==='TL5'&&rt.gm.atmosphere==='ROUNDTRIP_BREATHABLE'&&rt.gm.description==='ROUNDTRIP_DESCRIPTION_SENTINEL'&&rt.gm.customNote==='ROUNDTRIP_CUSTOM_WORLD_NOTE'&&rt.gm.poi&&rt.gm.body&&rt.gm.faction&&rt.gm.gmNote==='ROUNDTRIP_GM_NOTE_SENTINEL'&&rt.gm.sourceCount===rtSetup.records,'GM JSON export lost edits or source data: '+JSON.stringify(rt.gm));
     assert(rt.gmReload.name==='ROUNDTRIP_EDITED_WORLD'&&rt.gmReload.tech==='TL5'&&rt.gmReload.customNote==='ROUNDTRIP_CUSTOM_WORLD_NOTE'&&rt.gmReload.poi&&rt.gmReload.body&&rt.gmReload.faction&&rt.gmReload.gmNote==='ROUNDTRIP_GM_NOTE_SENTINEL'&&rt.gmReload.sourceCount===rtSetup.records,'GM JSON import/re-export lost edits: '+JSON.stringify(rt.gmReload));
     assert(rt.url.world==='ROUNDTRIP_EDITED_WORLD'&&rt.url.tech==='TL5'&&rt.url.poi&&rt.url.faction&&rt.url.sourceCount===rtSetup.records,'Compressed GM URL round-trip lost edited content/source archive: '+JSON.stringify(rt.url));
