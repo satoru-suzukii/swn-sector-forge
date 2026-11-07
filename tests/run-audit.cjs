@@ -38,6 +38,9 @@ for (let i=0; i<stats.runs; i++) {
       if (coordSet.has(coord)) stats.duplicateCoords++;
       coordSet.add(coord);
       if (!system.bodies || !system.bodies.length) stats.missingBodies++;
+      const hasBlackHolePrimary = (system.bodies || []).some(body => body.bodyClass === 'B');
+      if (hasBlackHolePrimary !== (system.systemType === 'blackHole')) failures.push('Black-hole primary/system type mismatch: '+system.id);
+      if (hasBlackHolePrimary && (system.bodies || []).some(body => body.bodyClass === 'S' && body.isGeneratedPrimary)) failures.push('Black-hole primary was also represented as an ordinary star: '+system.id);
       if (system.planets.some(p=>!(system.bodies||[]).some(b=>b.planetId===p.id))) failures.push('Survey missing linked planet: '+system.id);
       if (!system.planets || !system.planets.length) stats.emptySystems++;
       if (!system.id) stats.missingIds++;
@@ -214,7 +217,7 @@ for (const [preset, min, max] of densitySystemCases) {
   const generated = generateDensity(preset, 'empty');
   densityAudit.systemCounts[preset] = generated.length;
   assert(generated.length >= min && generated.length <= max, `${preset} system density produced ${generated.length} systems, expected ${min}-${max}`);
-  assert(generated.every(s => Array.isArray(s.planets) && s.planets.length === 0 && Array.isArray(s.pointsOfInterest) && s.pointsOfInterest.length === 0 && (s.bodies||[]).every(b => b.bodyClass === 'S')), `${preset} + empty world content created planets, POIs, or non-star orbital objects`);
+  assert(generated.every(s => Array.isArray(s.planets) && s.planets.length === 0 && Array.isArray(s.pointsOfInterest) && s.pointsOfInterest.length === 0 && (s.bodies||[]).every(b => b.bodyClass === 'S' || b.bodyClass === 'B')), `${preset} + empty world content created planets, POIs, or non-star orbital objects`);
 }
 for (const preset of ['empty','scarce','normal','crowded']) {
   const generated = generateDensity('scarce', preset);
@@ -222,7 +225,7 @@ for (const preset of ['empty','scarce','normal','crowded']) {
   for (const system of generated) {
     const planets = (system.planets||[]).length;
     const poi = (system.pointsOfInterest||[]).length;
-    const extras = (system.bodies||[]).filter(b => b.bodyClass !== 'S' && b.bodyClass !== 'P').length;
+    const extras = (system.bodies||[]).filter(b => b.bodyClass !== 'S' && b.bodyClass !== 'B' && b.bodyClass !== 'P').length;
     statsForPreset.planets += planets; statsForPreset.poi += poi; statsForPreset.extras += extras;
     if (preset==='empty' && (planets!==0 || poi!==0 || extras!==0)) failures.push('Empty world density is not empty');
     if (preset==='scarce' && (planets>2 || poi>2 || extras>2)) failures.push('Scarce world density exceeded a per-system cap');

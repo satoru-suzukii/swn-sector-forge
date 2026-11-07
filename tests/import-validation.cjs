@@ -75,6 +75,7 @@ const researchSource = acheron.swnImport.records.filter(record => record.type ==
 const researchBodies = allSurveyBodies.filter(body => body.sourceEntityType === 'researchBase');
 assert.equal(acheron.swnImport.records.length, 293, 'Acheron Rho actual export should preserve 293 source records');
 assert.equal(acheron.systems.length, 36, 'Acheron Rho actual export should map 36 top-level systems/black holes');
+assert.ok(acheron.systems.some(system => system.sourceEntityType === 'blackHole'), 'Acheron Rho black-hole entity must retain its distinct source system type');
 assert.equal(acheron.systems.reduce((n, system) => n + system.planets.length, 0), 46, 'Acheron Rho actual export should map 46 planets');
 assert.equal(allSurveyBodies.length, 210, 'Acheron Rho actual export should map 210 additional survey entities');
 assert.equal(researchSource.length, 42, 'Acheron Rho actual export should contain 42 research bases');
