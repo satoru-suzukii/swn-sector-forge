@@ -1,5 +1,16 @@
 # Changelog
 
+## Editor controls and responsiveness — 7 November 2026
+
+- Fixed shared editor value handling so strings, numbers and booleans use the correct input property. Individual **Revert** and **Revert All** restore the exact values captured when the editor opened; cancel no longer triggers table-save callbacks or export work.
+- Added field-level randomisers and meaningful templates for corporations, religions, political groups and aliens. Added campaign-aware rerollers for factions, faction assets, polities, market goods and common campaign-story fields. Randomise All now uses the live draft and preserves dependencies such as faction maximum HP before current HP.
+- Added browser regressions for Randomise/Revert and Randomise All/Revert All across factions, corporations, religions, political groups, aliens, faction assets, polities, market goods, story records and boolean controls.
+- Moved GM/player JSON creation, player redaction, pretty-printing and share-link compression into a same-origin Web Worker. Export links are disabled and stale share URLs cleared while a fresh snapshot is being prepared. The exact existing player privacy rules are mirrored by the worker and kept as a synchronous fallback for offline or restricted contexts.
+- Coalesced rapid export requests to the latest sector snapshot, guarded worker errors with a synchronous retry, and retained previous object-URL cleanup.
+- Replaced repeated region/system lookup scans in map rendering with indexed lookups and removed duplicate campaign influence recalculation.
+- Measured the Acheron Rho import (36 systems, 293 source records): map redraw median 2.4 ms / max 7.2 ms; campaign panel rebuild median 0.8 ms / max 0.8 ms in the final inline-browser run. A separate Node worker-thread run measured 5.1 ms main-thread handoff and 547.8 ms worker completion for the export payload.
+- Browser offline-inline regression suite: all 19 grouped areas pass with zero uncaught JavaScript errors. `node tests/export-worker.cjs` confirms worker-generated player JSON exactly matches `App.censorSector` on the Acheron Rho fixture.
+
 ## Editor, faction and black-hole regression fixes — 7 November 2026
 
 - Fixed imported planet edits that could erase untouched SWN values when the source vocabulary did not match Forge dropdown choices. Unknown existing values are now retained as explicit options, and saving uses a complete draft so unchanged data and source metadata survive.

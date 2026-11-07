@@ -166,13 +166,21 @@ var Hexmap = {
     var center = function(x,y) { return self._center(x,y); };
     var esc = function(v) { return self._escape(v); };
     var hexPoints = function(x,y,r) { return self._hexPoints(x,y,r); };
-    function getRegionFor(x,y) {
-      return (sector.regions||[]).find(function(r) { return (r.hexes||[]).some(function(h){return Number(h.x)===x && Number(h.y)===y;}); }) || null;
-    }
+    // Index region hexes and systems once. The previous renderer repeatedly
+    // scanned every region for every hex and every system for every route.
+    var regionAt = new Map();
+    (sector.regions||[]).forEach(function(region) {
+      (region.hexes||[]).forEach(function(hex) {
+        var key = Number(hex.x) + ',' + Number(hex.y);
+        if (!regionAt.has(key)) regionAt.set(key, region);
+      });
+    });
+    function getRegionFor(x,y) { return regionAt.get(x + ',' + y) || null; }
     var systemsList = sector.systems || [];
     var systemAt = new Map(systemsList.map(function(sys){return [String(sys.x)+','+String(sys.y),sys];}));
+    var systemsById = new Map(systemsList.map(function(sys){return [sys.id,sys];}));
     var routes = (sector.tradeRoutes||[]).map(function(route){
-      var a=systemsList.find(function(x){return x.id===route.fromSystemId;}), b=systemsList.find(function(x){return x.id===route.toSystemId;});
+      var a=systemsById.get(route.fromSystemId), b=systemsById.get(route.toSystemId);
       if(!a||!b)return '';
       var ca=center(a.x,a.y), cb=center(b.x,b.y);
       return '<line class="route-line '+(route.kind==='trade'?'route-trade':'route-scout')+'" data-route-id="'+esc(route.id)+'" x1="'+ca.x+'" y1="'+ca.y+'" x2="'+cb.x+'" y2="'+cb.y+'"><title>'+esc(route.kind+' route: '+a.name+' — '+b.name+' ('+route.distance+' hexes)')+'</title></line>';

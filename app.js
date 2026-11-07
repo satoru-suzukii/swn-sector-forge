@@ -59,7 +59,6 @@ App.initialize = function() {
 				App.displaySector(sector);
 				tabs.setVisibleTab(1);
 				viewerContainerElement.classList.remove('hide-section');
-				App.setURL(sector);
 				if (sector.importMetadata && sector.importMetadata.warnings && sector.importMetadata.warnings.length) {
 					window.alert('Import complete with notes:\n\n' + sector.importMetadata.warnings.slice(0, 8).join('\n') + (sector.importMetadata.warnings.length > 8 ? '\n…and ' + (sector.importMetadata.warnings.length - 8) + ' more.' : ''));
 				} else if (sector.swnImport) {
@@ -87,7 +86,6 @@ App.initialize = function() {
 		
 		viewerContainerElement.classList.remove('hide-section');
 		
-		App.setURL(sector);
 	});
 	
 	// ---------------------------------------------------------------------- //
@@ -338,7 +336,7 @@ App.displayCorporationDirectory = function(sector) {
 		DynTable.basicColumn('Valuation', 'valuation')
 	]);
 	output.appendChild(table.getElement());
-	table.enableEditing({}, function() { App.setURL(sector); App.createDownloadLink(sector); });
+	table.enableEditing(CorporationGenerator.template, function() { App.persistSector(sector); });
 	table.addRows(sector.corporations || []);
 	table.sort(0);
 };
@@ -381,7 +379,7 @@ App.displaySector = function(sector) {
 	App.displaySectorName(sector);
 	
 	// set up the export tab
-	App.createDownloadLink(sector);
+	App.persistSector(sector);
 	
 	// display the sector hexmap
 	App.displayHexmap(sector);
@@ -401,11 +399,8 @@ App.displaySector = function(sector) {
 	]);
 	religionsOutput.appendChild(religionsTable.getElement());
 	religionsTable.enableEditing(
-		{},
-		function() {
-			App.setURL(sector);
-			App.createDownloadLink(sector);
-		}
+		ReligionGenerator.template,
+		function() { App.persistSector(sector); }
 	);
 	
 	religionsTable.addRows(sector.religions);
@@ -421,10 +416,7 @@ App.displaySector = function(sector) {
 	politicalGroupsOutput.appendChild(politicalGroupsTable.getElement());
 	politicalGroupsTable.enableEditing(
 		PoliticalGroupGenerator.template,
-		function() {
-			App.setURL(sector);
-			App.createDownloadLink(sector);
-		}
+		function() { App.persistSector(sector); }
 	);	
 	
 	politicalGroupsTable.addRows(sector.politicalGroups);
@@ -442,10 +434,7 @@ App.displaySector = function(sector) {
 	]);
 	aliensTable.enableEditing(
 		AlienGenerator.template,
-		function() {
-			App.setURL(sector);
-			App.createDownloadLink(sector);
-		}
+		function() { App.persistSector(sector); }
 	);	
 	aliensOutput.appendChild(aliensTable.getElement());
 	
@@ -482,8 +471,7 @@ App.displaySectorName = function(sector) {
 			sector,
 			{lists:{},generators:{name:() => App.generateSectorName()},hide:['gmMode']},
 			function() {
-				App.setURL(sector);
-				App.createDownloadLink(sector);
+				App.persistSector(sector);
 				
 				App.displaySectorName(sector);
 			}
@@ -810,8 +798,7 @@ App.displayWorlds = function(sector) {
 		function() {
 			worlds.forEach(function(entry) { entry.planet.description = WorldGenerator.describePlanet(entry.planet); });
 			App.displayHexmap(sector);
-			App.setURL(sector);
-			App.createDownloadLink(sector);
+			App.persistSector(sector);
 		},
 		'planet'
 	);
@@ -825,9 +812,8 @@ App.displayWorlds = function(sector) {
 // Extended campaign workspaces
 
 App.persistSector = function(sector) {
-	if (!sector) return;
-	App.setURL(sector);
-	App.createDownloadLink(sector);
+	if (!sector) return Promise.resolve(false);
+	return App.createDownloadLink(sector);
 };
 
 App.appendElement = function(parent, tagName, text, className) {
@@ -1009,10 +995,95 @@ App.renderStoryCards = function(container, items, config) {
 	});
 };
 
+App.buildCampaignEditTemplate = function(title, object, hide, lists) {
+	var template = {hide:(hide || []), lists:(lists || {}), generators:{}};
+	var generators = template.generators;
+	var has = function(key) { return Object.prototype.hasOwnProperty.call(object || {}, key) && (typeof object[key] === 'string' || typeof object[key] === 'number' || typeof object[key] === 'boolean'); };
+	var pick = function(items) { return items[Math.floor(Math.random() * items.length)]; };
+	var int = function(min, max) { return min + Math.floor(Math.random() * (max - min + 1)); };
+	var set = function(key, fn) { if (has(key)) generators[key] = fn; };
+	var sector = App.currentSector || {};
+	var factionTypes = ['Planetary government','Trade combine','Intelligence service','Mercenary league','Religious movement','Frontier coalition','Research directorate','Free-trader network','Colonial authority','Veteran diaspora','Independent power'];
+	var factionGoals = ['Expand influence along a trade corridor','Remove a rival from a strategic world','Gain control of a vital resource','Protect a threatened client system','Expose a concealed conspiracy','Secure recognition as a legitimate government','Recover an abandoned pretech facility','Prevent a neighboring power from expanding'];
+	var factionTags = ['ambitious','secretive','warlike','plutocratic','zealous','technically adept','fragmented','reluctant','pragmatic','reformist'];
+	var isFaction = Array.isArray(object && object.assets) && has('force') && has('cunning') && has('wealth') && has('primaryRating');
+	var isAsset = has('ownerFactionId') && has('rating') && has('maintenance') && has('type');
+	var isCorporation = has('ownership') && has('valuation') && has('strategy') && has('markets');
+	var isPolity = Array.isArray(object && object.memberSystemIds) && has('government') && has('stability');
+	var isMarketGood = has('priceIndex') && has('localPrice') && has('supply') && has('category');
+
+	if (isFaction) {
+		set('name', function() { var names=(sector.politicalGroups||[]).concat(sector.corporations||[],sector.religions||[]).map(function(item){return item.name;}).filter(Boolean); return names.length && Math.random()<0.6 ? pick(names) : SWNNameGen.getName() + ' ' + pick(['Authority','Compact','League','Combine','Movement']); });
+		set('type', function() { return pick(factionTypes); });
+		set('scale', function() { return pick(['Minor power','Established power','Regional hegemon']); });
+		set('force', function() { return int(0,8); });
+		set('cunning', function() { return int(0,8); });
+		set('wealth', function() { return int(0,8); });
+		set('primaryRating', function() { return pick(['force','cunning','wealth']); });
+		set('goal', function() { return pick(factionGoals); });
+		set('tag', function() { return pick(factionTags); });
+		set('homeworldSystemId', function() { var options=template.lists.homeworldSystemId || []; return options.length ? pick(options) : ''; });
+		set('maxHitPoints', function() { return int(8,50); });
+		set('hitPoints', function(draft) { return int(0,Math.max(1,Number(draft.maxHitPoints)||10)); });
+		set('factionCredits', function() { return int(0,12); });
+		set('experience', function() { return int(0,15); });
+		set('progress', function() { return int(0,6); });
+		set('tension', function() { return int(1,6); });
+		set('color', function() { return pick((window.CampaignTools && CampaignTools.FACTION_COLORS) || ['#70e0cf','#e6bd83','#b39bff','#ef8294']); });
+	} else if (isAsset) {
+		var assetCatalog = (window.CampaignTools && CampaignTools.ASSET_CATALOG) || [];
+		set('type', function() { return pick(assetCatalog).type; });
+		set('name', function(draft) { var current=assetCatalog.filter(function(item){return !draft.type || item.type===draft.type;}); return pick(current.length?current:assetCatalog).name; });
+		set('stat', function() { return pick(['force','cunning','wealth']); });
+		set('rating', function() { return int(0,8); });
+		set('minimumRating', function() { return int(0,5); });
+		set('hp', function() { return int(1,20); });
+		set('maintenance', function() { return int(0,4); });
+		set('cost', function() { return int(1,12); });
+		set('income', function() { return int(0,5); });
+		set('active', function(draft) { return !draft.active; });
+		set('stealthed', function(draft) { return !draft.stealthed; });
+	} else if (isPolity) {
+		set('name', function() { return SWNNameGen.getName() + ' ' + pick(['Compact','League','Protectorate','Assembly','Mandate']); });
+		set('government', function() { return pick(['Federated republic','Dynastic compact','Corporate protectorate','Loose trade league','Military directorate','Theocratic concord','Mutual-defense pact','Client-state network','Confederated worlds']); });
+		set('policy', function() { return pick(['secure a jump corridor','preserve a fragile peace','control a rare resource','contain a rival ideology','restore an old mandate claim','open a new market','protect a frontier from raiders','keep outsiders away']); });
+		set('stability', function() { return int(1,6); });
+	} else if (isMarketGood) {
+		set('supply', function() { return pick(['Abundant','Common','Available','Scarce','Very scarce','Unavailable']); });
+		set('priceIndex', function() { return int(60,180); });
+		set('localPrice', function(draft) { return Math.max(1,Math.round(Number(draft.basePrice || object.basePrice || 100) * Number(draft.priceIndex || 100) / 100)); });
+		set('note', function() { return pick(['Reliable local supply','Prices fluctuate with shipping delays','A powerful local buyer dominates supply','Recent shortages have raised prices','Surplus stock is available','Imports are tightly controlled']); });
+	}
+
+	// Shared rerolls for common campaign fields. Fields without a safe, meaningful
+	// domain-specific generator remain editable but are not given a misleading icon.
+	set('status', function() { return pick(['Active','Unplayed','Played','Pending','Established','Surveyed','Disrupted']); });
+	set('kind', function() { return pick(['trade','scout']); });
+	set('trust', function() { return int(1,6); });
+	set('tension', function() { return int(1,6); });
+	set('stability', function() { return int(1,6); });
+	set('stake', function() { return int(5,95); });
+	set('name', generators.name || function() { return SWNNameGen.getName(); });
+	set('title', function() { return pick(['A debt unpaid','The silent signal','A disputed inheritance','The broken alliance','A promise in ash','The last convoy']); });
+	set('objective', function() { return pick(['Recover a missing cache','Negotiate a fragile truce','Expose a hidden patron','Escort a threatened convoy','Secure a derelict installation','Prevent a local succession crisis']); });
+	set('motive', function() { return pick(['gain influence','conceal a dangerous secret','protect a family member','settle an old debt','escape a patron','secure forbidden knowledge']); });
+	set('government', generators.government || function() { return pick(['Democratic','Monarchic','Tribal','Oligarchic','Military directorate','Corporate protectorate']); });
+	set('policy', generators.policy || function() { return pick(['expand trade','preserve stability','secure a resource','contain a rival','avoid outside influence']); });
+	set('priceIndex', generators.priceIndex || function() { return int(60,180); });
+	set('localPrice', generators.localPrice || function() { return int(100,5000); });
+	set('notes', function() { return pick(['','A local contact may know more.','Verify this information before acting.','The situation is changing rapidly.']); });
+	return template;
+};
+
 App.editCampaignObject = function(title, object, hide, afterSave, lists) {
-	var template = {hide:(hide || []), lists:(lists || {})};
+	var template = App.buildCampaignEditTemplate(title, object, hide, lists);
 	DynEdit.edit(title, object, template, function(saved) {
 		if (saved) {
+			if (Array.isArray(object.assets) && object.maxHitPoints != null) {
+				object.maxHitPoints = Math.max(1, Math.round(Number(object.maxHitPoints) || 10));
+				object.hitPoints = Math.max(0, Math.min(object.maxHitPoints, Math.round(Number(object.hitPoints) || 0)));
+				['force','cunning','wealth'].forEach(function(stat) { object[stat] = Math.max(0,Math.min(8,Math.round(Number(object[stat])||0))); });
+			}
 			if (afterSave) afterSave();
 			if (App.currentSector) App.persistSector(App.currentSector);
 		}
@@ -1081,7 +1152,6 @@ App.renderCampaignPanels = function(sector) {
 		return {item:rel,values:[a.name||rel.factionAId,rel.state,b.name||rel.factionBId,rel.trust,rel.tension,rel.lastEvent||'No recent change']};
 	}), {label:'Change posture',callback:function(rel){CampaignTools.cycleDiplomacy(sector,rel);CampaignTools.updateMarkets(sector,sector.factionTurn||0);App.renderCampaignPanels(sector);App.displayHexmap(sector);App.persistSector(sector);}});
 
-	CampaignTools.recalculateInfluence(sector);
 	App.renderSimpleTable(document.getElementById('influence-output'), ['System','Hex','Controller','Influence','Status','Trade links','Markets'], (sector.systems||[]).map(function(sys){
 		var top=(sys.factionInfluence||[])[0];var routes=(sector.tradeRoutes||[]).filter(function(r){return r.fromSystemId===sys.id||r.toSystemId===sys.id;}).length;var markets=(sector.markets||[]).filter(function(m){return m.systemId===sys.id;}).length;
 		return {item:sys,values:[sys.name,String(sys.x).padStart(2,'0')+String(sys.y).padStart(2,'0'),sys.controllingFactionName||'Independent',top?top.score:'—',sys.isContested?'Contested':(sys.controllingFactionId?'Controlled':'Open'),routes,markets]};
@@ -1487,8 +1557,7 @@ App.displaySystemInspector = function(inspectorElement, system, sector) {
 			var importedObjects = (system.bodies || []).filter(function(body) { return body && body.importedFromSWN; });
 			var generatedBodies = StarSystemGenerator.generate(Array.isArray(system.planets) ? system.planets : [], {contentDensity:(sector.generationSettings && sector.generationSettings.worldDensity) || 'default'});
 			system.bodies = generatedBodies.concat(importedObjects);
-			App.setURL(sector);
-			App.createDownloadLink(sector);
+			App.persistSector(sector);
 			App.displayHexmap(sector, system);
 			App.displayWorlds(sector);
 		}
@@ -1593,23 +1662,176 @@ App.displaySystemInspector = function(inspectorElement, system, sector) {
 
 // ************************************************************************** //
 
-App.createDownloadLink = function(sector) {
-	let data = JSON.stringify(sector, null, ' ');
-	
-	let exportJsonGmElement = document.getElementById('export-json-gm');
-	exportJsonGmElement.href = window.URL.createObjectURL(new Blob([data], {type: 'text/plain'}));
-	exportJsonGmElement.download = ('Sector'+sector.name).replace(/ /g, '')+'_GM.json';
-	
-	let censoredSector = App.censorSector(sector)
-	data = JSON.stringify(censoredSector, null, ' ');
+App._exportObjectUrls = App._exportObjectUrls || {gm:'', player:''};
+App._exportSequence = App._exportSequence || 0;
+App._exportWorkerAttempted = false;
+App._exportWorker = null;
+App._exportWorkerBusy = false;
+App._queuedExport = null;
+App._exportWaiters = [];
 
-	let exportJsonPlayerElement = document.getElementById('export-json-player');
-	exportJsonPlayerElement.href = window.URL.createObjectURL(new Blob([data], {type: 'text/plain'}));
-	exportJsonPlayerElement.download = ('Sector'+sector.name).replace(/ /g, '')+'_Player.json';
-	
-	let exportURLGMElement = document.getElementById('export-url-gm');
-	exportURLGMElement.value = URLParam.createURL({data:App.compressSector(sector)});
-	
-	let exportURLPlayerElement = document.getElementById('export-url-player');
-	exportURLPlayerElement.value = URLParam.createURL({data:App.compressSector(censoredSector)});	
-}
+App.waitForExports = function() {
+	if (!App._exportPromise) return Promise.resolve(true);
+	return App._exportPromise;
+};
+
+App._resolveExportWaiters = function(sequence, result) {
+	var remaining = [];
+	App._exportWaiters.forEach(function(waiter) {
+		if (waiter.sequence <= sequence) waiter.resolve(result);
+		else remaining.push(waiter);
+	});
+	App._exportWaiters = remaining;
+};
+
+App._applyExportCompression = function(payload, result) {
+	if (!payload || payload.seq !== App._exportSequence || !result) return false;
+	if (result.error) throw new Error(result.error);
+	var gmLink = document.getElementById('export-json-gm');
+	var playerLink = document.getElementById('export-json-player');
+	if (result.gmBlob && result.playerBlob) {
+		if (App._exportObjectUrls.gm) window.URL.revokeObjectURL(App._exportObjectUrls.gm);
+		if (App._exportObjectUrls.player) window.URL.revokeObjectURL(App._exportObjectUrls.player);
+		App._exportObjectUrls.gm = window.URL.createObjectURL(result.gmBlob);
+		App._exportObjectUrls.player = window.URL.createObjectURL(result.playerBlob);
+		gmLink.href = App._exportObjectUrls.gm;
+		playerLink.href = App._exportObjectUrls.player;
+		gmLink.download = ('Sector'+payload.sectorName).replace(/ /g, '')+'_GM.json';
+		playerLink.download = ('Sector'+payload.sectorName).replace(/ /g, '')+'_Player.json';
+		gmLink.removeAttribute('aria-disabled');
+		playerLink.removeAttribute('aria-disabled');
+	}
+	if (result.gmCompressed && result.playerCompressed) {
+		var gmUrl = document.getElementById('export-url-gm');
+		var playerUrl = document.getElementById('export-url-player');
+		gmUrl.value = URLParam.createURL({data:result.gmCompressed});
+		playerUrl.value = URLParam.createURL({data:result.playerCompressed});
+		URLParam.encode({data:result.gmCompressed});
+	}
+	return true;
+};
+
+App._ensureExportWorker = function() {
+	if (App._exportWorkerAttempted) return App._exportWorker;
+	App._exportWorkerAttempted = true;
+	if (typeof Worker === 'undefined') return null;
+	try {
+		App._exportWorker = new Worker(new URL('export-worker.js', document.baseURI));
+		App._exportWorker.onmessage = function(event) {
+			var payload = App._activeExport;
+			App._exportWorkerBusy = false;
+			if (payload && event.data && event.data.seq === payload.seq && payload.seq === App._exportSequence) {
+				try {
+					App._applyExportCompression(payload, event.data);
+					App._resolveExportWaiters(payload.seq, true);
+				} catch (error) {
+					console.warn('Export worker result was unusable; retrying in the page thread:', error);
+					try {
+						App._applyExportCompression(payload, App._buildExportPayload(payload));
+						App._resolveExportWaiters(payload.seq, true);
+					} catch (fallbackError) {
+						console.error('Export fallback failed:', fallbackError);
+						App._resolveExportWaiters(payload.seq, false);
+					}
+				}
+			}
+			App._activeExport = null;
+			App._dispatchExportCompression();
+		};
+		App._exportWorker.onerror = function(event) {
+			if (App._exportWorker) App._exportWorker.terminate();
+			App._exportWorker = null;
+			App._exportWorkerBusy = false;
+			App._exportWorkerAttempted = true;
+			var payload = App._queuedExport || App._activeExport;
+			App._queuedExport = null;
+			App._activeExport = null;
+			if (payload && payload.seq === App._exportSequence) {
+				try {
+					App._applyExportCompression(payload, App._buildExportPayload(payload));
+					App._resolveExportWaiters(payload.seq, true);
+				} catch (error) {
+					console.error('Synchronous export fallback failed:', error);
+					App._resolveExportWaiters(payload.seq, false);
+				}
+			}
+			if (event && event.message) console.warn('Export worker unavailable; used synchronous fallback:', event.message);
+			// A newer save may have arrived while the failed worker was busy.
+			// Dispatch it now through the synchronous fallback rather than leaving
+			// its completion promise pending forever.
+			App._dispatchExportCompression();
+		};
+	} catch (error) {
+		App._exportWorker = null;
+	}
+	return App._exportWorker;
+};
+
+App._dispatchExportCompression = function() {
+	if (App._exportWorkerBusy || !App._queuedExport) return;
+	var payload = App._queuedExport;
+	App._queuedExport = null;
+	var worker = App._ensureExportWorker();
+	if (worker) {
+		App._activeExport = payload;
+		App._exportWorkerBusy = true;
+		try {
+			worker.postMessage(payload);
+			return;
+		} catch (error) {
+			if (worker) worker.terminate();
+			App._exportWorker = null;
+			App._exportWorkerBusy = false;
+			App._activeExport = null;
+			App._exportWorkerAttempted = true;
+			console.warn('Export worker could not accept a save; used synchronous fallback:', error);
+		}
+	}
+	// Inline/offline/file contexts may prohibit Worker construction. Keep the
+	// original encoder as a deterministic fallback for those environments.
+	try {
+		var result = App._buildExportPayload(payload);
+		App._applyExportCompression(payload, result);
+		App._resolveExportWaiters(payload.seq, true);
+	} catch (error) {
+		console.error('Export preparation failed:', error);
+		App._resolveExportWaiters(payload.seq, false);
+	}
+};
+
+// Same deterministic export builder for offline browsers and worker failures.
+// The normal hosted path builds these payloads inside export-worker.js instead.
+App._buildExportPayload = function(payload) {
+	var sector = payload.sector;
+	var gmPretty = JSON.stringify(sector, null, ' ');
+	var gmCompact = JSON.stringify(sector);
+	var playerSector = App.censorSector(sector);
+	var playerPretty = JSON.stringify(playerSector, null, ' ');
+	var playerCompact = JSON.stringify(playerSector);
+	return {
+		gmBlob:new Blob([gmPretty], {type:'application/json'}),
+		playerBlob:new Blob([playerPretty], {type:'application/json'}),
+		gmCompressed:LZString.compressToEncodedURIComponent(gmCompact),
+		playerCompressed:LZString.compressToEncodedURIComponent(playerCompact)
+	};
+};
+
+App.createDownloadLink = function(sector) {
+	if (!sector) return Promise.resolve(false);
+	var gmLink = document.getElementById('export-json-gm');
+	var playerLink = document.getElementById('export-json-player');
+	// Disable stale downloads while a newer, worker-prepared snapshot is pending.
+	gmLink.removeAttribute('href');
+	playerLink.removeAttribute('href');
+	gmLink.setAttribute('aria-disabled', 'true');
+	playerLink.setAttribute('aria-disabled', 'true');
+	// Clear previous share URLs as well; never leave a stale link looking current
+	// while the worker prepares an updated sector snapshot.
+	document.getElementById('export-url-gm').value = '';
+	document.getElementById('export-url-player').value = '';
+	var payload = {seq:++App._exportSequence,sector:sector,sectorName:sector.name || 'Unnamed'};
+	App._queuedExport = payload; // coalesce rapid saves to the newest snapshot.
+	App._exportPromise = new Promise(function(resolve) { App._exportWaiters.push({sequence:payload.seq,resolve:resolve}); });
+	App._dispatchExportCompression();
+	return App._exportPromise;
+};

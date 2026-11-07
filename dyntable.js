@@ -152,13 +152,11 @@ DynTable.prototype._addRowNoValidate = function(object) {
 				editObject = DynTable.getAttributeByString(editObject, self.editPath);
 			}
 			
-			DynEdit.edit('Editing', editObject, self.editTemplate, function() {
+			DynEdit.edit('Editing', editObject, self.editTemplate, function(saved) {
+				if (!saved) return;
 				constructRow();
 				self._validateColumns();
-				
-				if (self.editCallback) {
-					self.editCallback();
-				}
+				if (self.editCallback) self.editCallback();
 			});
 		});
 		

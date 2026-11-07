@@ -202,9 +202,11 @@ To resume a sector later, load its exported JSON file or open its share URL. Kee
 │   ├── campaign-tools.js              # Campaign toolkits and prompts
 │   └── data/                          # Text tables and naming data
 ├── FEATURE_PARITY.md                  # SWN importer coverage and known gaps
+├── export-worker.js                  # Off-thread JSON export, redaction, and link compression
 ├── tests/
 │   ├── run-audit.cjs                  # Generator and data-integrity audit
 │   ├── e2e.cjs                        # Chromium browser end-to-end suite
+│   ├── export-worker.cjs              # Worker-thread export/privacy regression
 │   ├── import-validation.cjs          # CSV/native JSON import checks
 │   ├── fixtures/                      # The three supplied SWN CSV regression exports
 │   ├── *-validation-report.json        # Recorded validation reports
@@ -229,7 +231,7 @@ From the repository root, run:
 node tests/run-audit.cjs
 ```
 
-The default audit exercises core and expanded generation, black-hole primary consistency, data relationships, routes, markets, faction turns, and campaign-tool output. Run `node tests/import-validation.cjs` to validate all three supplied CSV exports and the native JSON fixture. To increase the workload, use environment variables such as:
+The default audit exercises core and expanded generation, black-hole primary consistency, data relationships, routes, markets, faction turns, and campaign-tool output. Run `node tests/import-validation.cjs` to validate all three supplied CSV exports and the native JSON fixture. Run `node tests/export-worker.cjs` to execute the export worker on a separate Node worker thread and verify that its player-safe JSON matches the app's privacy filter exactly. To increase the workload, use environment variables such as:
 
 ```bash
 SWN_CORE_RUNS=10000 SWN_EXPANDED_RUNS=3000 SWN_FACTION_SECTORS=60 node tests/run-audit.cjs
@@ -255,7 +257,7 @@ An offline-inline mode is also available for environments where the test browser
 E2E_INLINE=1 node tests/e2e.cjs
 ```
 
-The JSON reports document validation runs performed during development. [`tests/release-validation-report.json`](tests/release-validation-report.json) records the checks run for this updated snapshot, including grid and import coverage, a generator/faction audit, JavaScript syntax checks, local-reference checks, and the Chromium end-to-end suite. Run the commands above against the commit you intend to publish if you need to refresh the result for a later revision. The fixes in the 7 November 2026 revision are summarized in [`FIXES_2026-11-07_TEST_REPORT.md`](FIXES_2026-11-07_TEST_REPORT.md), including the imported-planet editor regression, custom faction workflow, black-hole representation, and current validation results.
+The export worker is loaded dynamically from `export-worker.js` when Sector Forge is served from a same-origin HTTP(S) site. Browsers that disallow workers (for example, some local `file://` previews) use the synchronous compatibility fallback. The JSON reports document validation runs performed during development. [`tests/release-validation-report.json`](tests/release-validation-report.json) records the checks run for this updated snapshot, including grid and import coverage, a generator/faction audit, JavaScript syntax checks, local-reference checks, and the Chromium end-to-end suite. Run the commands above against the commit you intend to publish if you need to refresh the result for a later revision. The earlier 7 November import/faction/black-hole fixes are summarized in [`FIXES_2026-11-07_TEST_REPORT.md`](FIXES_2026-11-07_TEST_REPORT.md). The follow-up editor-control and export-performance work is documented in [`EDITOR_PERFORMANCE_FIX_REPORT_2026-11-07.md`](EDITOR_PERFORMANCE_FIX_REPORT_2026-11-07.md).
 
 ## Scope and limitations
 
