@@ -259,9 +259,20 @@ AlienGenerator.generate = function() {
 
 AlienGenerator.template = {
 	lists:{
-		
+		type:AlienGenerator.types.map(function(type) { return type.name; }),
+		government:['Democratic','Monarchic','Tribal','Oligarchic','Multipolar competitive','Multipolar cooperative'],
+		techLevel:['TL3 equivalent','TL4 equivalent','TL4 with narrow specialties','TL5 relic capability'],
+		firstContact:['formal embassy','frontier enclave','mobile fleet','sealed habitat','remote homeworld','small diaspora communities']
 	},
 	generators:{
-		name:() => AlienGenerator.generateName()
+		name:function() { return AlienGenerator.generateName(); },
+		type:function() { var first=GenUtil.pickRandom(AlienGenerator.types), second=GenUtil.pickRandom(AlienGenerator.types); return first.name === second.name ? first.name : first.name + '/' + second.name; },
+		body:function() { var first=GenUtil.pickRandom(AlienGenerator.types), second=GenUtil.pickRandom(AlienGenerator.types); return GenUtil.pickRandom(first.parts) + '; ' + GenUtil.pickRandom(second.parts); },
+		lenses:function() { var first=GenUtil.pickRandom(AlienGenerator.lenses); return Math.random()<0.5 ? first : first + ' & ' + GenUtil.pickRandom(AlienGenerator.lenses); },
+		government:function() { return GenUtil.pickRandom(['Democratic','Monarchic','Tribal','Oligarchic','Multipolar competitive','Multipolar cooperative']); },
+		motivation:function() { return GenUtil.pickRandom(['secure a new homeworld','prevent persecution of a diaspora','recover ancestral territory','control a rare ecological resource','contain a dangerous internal schism','establish recognition as a peer civilization','protect a sacred migration route','understand an alien technology']); },
+		humanRelations:function() { return GenUtil.pickRandom(['ordinary citizens on some worlds, distrusted elsewhere','careful trade partners with strict local protocols','openly hostile after a recent atrocity','poorly understood and routinely misrepresented','protected by a treaty that is close to collapse','dependent on human infrastructure but politically separate','welcomed by frontier settlements, opposed by core authorities']); },
+		techLevel:function() { return GenUtil.pickRandom(AlienGenerator.template.lists.techLevel); },
+		firstContact:function() { return GenUtil.pickRandom(AlienGenerator.template.lists.firstContact); }
 	}
 }

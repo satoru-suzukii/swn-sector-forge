@@ -381,3 +381,43 @@ CorporationGenerator.valuations = [
 	"booming",
 	"booming"
 ];
+// Field-level editor rerolls use the same corporate name vocabulary as sector
+// generation, but generate one value instead of constructing a full directory.
+CorporationGenerator.generateRandomName = function() {
+	var count = GenUtil.pickRandom([1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2]);
+	var name = '';
+	for (var i=0;i<count;i++) {
+		var roll = Math.random();
+		if (roll < 0.05 && Array.isArray(CorporationGenerator.legends) && CorporationGenerator.legends.length) name += GenUtil.capitalize(GenUtil.pickRandom(CorporationGenerator.legends));
+		else if (roll < 0.10) name += GenUtil.pickRandom(CorporationGenerator.poeticWords);
+		else if (roll < 0.15 && typeof BuzzwordGenerator !== 'undefined') name += GenUtil.capitalize(BuzzwordGenerator.generate());
+		else if (roll < 0.50) name += SWNNameGen.getName();
+		else name += GenUtil.pickRandom(CorporationGenerator.names);
+		if (i < count-1) name += '-';
+	}
+	var market = GenUtil.pickRandom(CorporationGenerator.markets);
+	var title = Math.random() < 0.333 ? GenUtil.pickRandom(market.titles) : GenUtil.pickRandom(CorporationGenerator.titles);
+	if (Math.random() < 0.15) title += ' ' + GenUtil.pickRandom(CorporationGenerator.titles);
+	return name + ' ' + title;
+};
+
+CorporationGenerator.generateRandomMarkets = function() {
+	var pool = GenUtil.shuffle(CorporationGenerator.markets.slice());
+	var count = GenUtil.pickRandom([1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,3,3,4]);
+	return pool.slice(0, count).map(function(market) { return market.name; }).join(', ');
+};
+
+CorporationGenerator.template = {
+	lists:{
+		ownership:CorporationGenerator.ownerships,
+		strategy:CorporationGenerator.growthStrategies,
+		valuation:CorporationGenerator.valuations
+	},
+	generators:{
+		name:function() { return CorporationGenerator.generateRandomName(); },
+		markets:function() { return CorporationGenerator.generateRandomMarkets(); },
+		ownership:function() { return GenUtil.pickRandom(CorporationGenerator.ownerships); },
+		strategy:function() { return GenUtil.pickRandom(CorporationGenerator.growthStrategies); },
+		valuation:function() { return GenUtil.pickRandom(CorporationGenerator.valuations); }
+	}
+};

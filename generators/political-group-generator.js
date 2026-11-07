@@ -326,7 +326,8 @@ let PoliticalGroupGenerator = (function() {
 			leadership:leaderships
 		},
 		generators:{
-			name:() => generateName()
+			name:() => generateName(),
+			leadership:() => GenUtil.pickRandom(leaderships)
 		}
 	}
 	

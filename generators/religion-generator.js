@@ -110,3 +110,31 @@ ReligionGenerator.generate = function() {
 
 	return religions;
 }
+
+ReligionGenerator.generateRandomName = function() {
+	let evolution = GenUtil.pickRandom(this.evolutions);
+	let origins = GenUtil.shuffle(this.origins.slice());
+	let origin = origins[0];
+	if (evolution === "Syncretic") origin += "/" + (origins[1] || GenUtil.pickRandom(this.origins));
+	return evolution + " " + origin;
+};
+ReligionGenerator.generateRandomLeadership = function() {
+	let leadership = GenUtil.pickRandom(this.leaderships);
+	if (leadership === "Regional") {
+		let second = GenUtil.pickRandom(this.leaderships);
+		leadership = second === leadership ? "No Hierarchy" : leadership + " " + GenUtil.pluralize(second);
+	}
+	return leadership;
+};
+ReligionGenerator.generateRandomDoctrine = function() {
+	let doctrines = GenUtil.shuffle(this.doctrines.slice());
+	return doctrines[0] + " & " + doctrines[1];
+};
+ReligionGenerator.template = {
+	lists:{},
+	generators:{
+		name:function() { return ReligionGenerator.generateRandomName(); },
+		leadership:function() { return ReligionGenerator.generateRandomLeadership(); },
+		doctrine:function() { return ReligionGenerator.generateRandomDoctrine(); }
+	}
+};
