@@ -20,10 +20,9 @@ DynEdit.edit = function(title, object, template=null, callback=null) {
 	
 	let tableElem = simpleAppend(parentElem, 'table');
 	
-	if (object.notes === undefined) { object.notes = ""; }
-	if (object.privateNotes === undefined) { object.privateNotes = ""; }
-	
-	for (property in object) {
+	// Opening an editor must be side-effect free: do not add default fields to the
+	// live record until the user actually saves.
+	for (var property in object) {
 		let value = object[property];
 		
 		if (template && template.hide) {
@@ -55,8 +54,20 @@ DynEdit.edit = function(title, object, template=null, callback=null) {
 				
 				for (let i = 0; i < list.length; i++) {
 					let optionElem = document.createElement('option');
-					optionElem.text = optionElem.value = list[i];
+					optionElem.text = optionElem.value = String(list[i]);
 					inputElem.add(optionElem);
+				}
+				// Imported values may be valid SWN terms that Forge's generation tables
+				// do not use. Keep them as explicit options so an edit to another field
+				// cannot silently replace them with an empty string.
+				let existingValue = value == null ? '' : String(value);
+				let hasExistingOption = Array.prototype.some.call(inputElem.options, function(option) { return option.value === existingValue; });
+				if (!hasExistingOption) {
+					let preservedOption = document.createElement('option');
+					preservedOption.value = existingValue;
+					preservedOption.text = existingValue ? existingValue + ' (existing value)' : '(blank)';
+					preservedOption.setAttribute('data-preserved-existing-value', 'true');
+					inputElem.add(preservedOption, inputElem.options.length ? inputElem.options[0] : null);
 				}
 			}
 		}
@@ -79,7 +90,7 @@ DynEdit.edit = function(title, object, template=null, callback=null) {
 			}
 		}
 		
-		inputElem.value = object[property];
+		inputElem.value = value == null ? '' : value;
 		propertyData.inputElem = inputElem;
 		
 		let randomizeButton = '';
@@ -165,28 +176,23 @@ DynEdit.edit = function(title, object, template=null, callback=null) {
 	}
 	
 	function onSave() {
+		// Build the complete draft first, then commit it. Hidden and nested fields
+		// remain untouched; every visible primitive field retains its original
+		// value unless the corresponding control was deliberately changed.
+		let draft = currentObject();
+		for (var key in data) {
+			let propertyData = data[key];
+			let value = draft[key];
+			if (propertyData.type === 'number') {
+				if (value === '' || value === null || value === undefined || !Number.isFinite(Number(value))) value = propertyData.originalValue;
+				else value = Number(value);
+			}
+			if (propertyData.type === 'boolean') value = !!value;
+			draft[key] = value;
+		}
 		DynModal.hide(modal);
 		if (callback) {
-			for (property in data) {
-				let propertyData = data[property];
-				let value = propertyData.inputElem.value;
-				if (propertyData.type == 'boolean') {
-					value = propertyData.inputElem.checked;
-				}
-				if (propertyData.type == 'number') {
-					console.log(value);
-					
-					if (!isNaN(value)) {
-						value = parseFloat(value);
-					} else {
-						value = propertyData.originalValue;
-					}
-					
-					console.log(value);
-				}
-				
-				object[property] = value;
-			}
+			for (var commitKey in data) object[commitKey] = draft[commitKey];
 			callback(true);
 		}
 	}

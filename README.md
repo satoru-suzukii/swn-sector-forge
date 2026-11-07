@@ -25,9 +25,9 @@ Sector Forge is designed for referees who want a sector that is more than a map:
 - **Runs in a browser.** No account, application server, framework, package install, or build step is required to use the app.
 - **Import Sectors Without Number exports.** Load native JSON exports or entity CSV files; choose whether to preserve missing details as blank or let Sector Forge fill supported missing facility occupation/situation fields. Imported survey objects show their occupation, situation, descriptions, and parent; empty source records are identified rather than silently fabricated. Original source records are retained in the GM archive, supported route paths are drawn on the map, and supported layer regions are converted.
 - **Generate a 10 × 12 sector.** The standard system-density setting generates 21–30 occupied hexes by default, with optional presets for emptier or busier regions.
-- **Edit the map and systems.** Create a system in an empty hex, move systems through explicit controls, and add or edit planets, orbital objects, and points of interest.
+- **Edit the map and systems.** Create a system in an empty hex, move systems through explicit controls, and add or edit planets, orbital objects, and points of interest. Existing imported planet values outside Forge's dropdown vocabulary are preserved when another field is edited.
 - **Connect your campaign data.** Worlds, system surveys, markets, corporate relationships, routes, and faction influence use linked records.
-- **Simulate faction activity.** Advance faction turns to resolve events such as income, upkeep, asset operations, repairs, attacks, purchases, and expansion.
+- **Manage and simulate factions.** Create and edit custom Forge campaign factions, assign their home system and base of influence, manage diplomacy, and advance faction turns to resolve income, upkeep, asset operations, repairs, attacks, purchases, and expansion.
 - **Build usable campaign material.** Generate adventure seeds, political groups, religions, aliens, threats, NPC concepts, and other frontier-focused prompts.
 - **Export and resume.** Save a sector as JSON or create a compressed URL that opens the sector again.
 - **Includes automated checks.** Generator audits and Chromium-based end-to-end tests are included in `tests/`.
@@ -64,7 +64,8 @@ The separate **World & orbital content** setting controls how many planets, surf
 - Starts with **Edit mode OFF**, keeping editing controls hidden until they are deliberately enabled.
 - Lets you select a system, choose **Move selected system**, and then choose an empty destination hex.
 - Allows a system to be created in an empty hex while edit mode is enabled.
-- Supports editing system names, planets, orbital survey objects, and points of interest.
+- Supports editing system names, planets, orbital survey objects, and points of interest. Imported SWN dropdown values that Forge does not recognize are retained rather than cleared on save.
+- Displays imported black-hole systems with a distinct black-hole primary, map marker, inspector label, and accessible name.
 - Provides an independent **Faction domination** display toggle for faction-colored systems, control rings, and contested-system highlighting.
 - Recalculates related route, influence, market, and campaign references after supported edits.
 
@@ -92,7 +93,7 @@ See [SWN import compatibility status](FEATURE_PARITY.md) for the specific covera
 | **Political Groups** | Develop movements, coalitions, and other political organizations. |
 | **Religions** | Generate faiths and ideological forces that shape worlds. |
 | **Aliens** | Create non-human life, societies, and first-contact complications. |
-| **Factions** | Track faction goals, assets, upkeep, readiness, diplomacy, and turn-by-turn activity. |
+| **Factions** | Create/edit custom Forge factions and track goals, assets, upkeep, readiness, diplomacy, and turn-by-turn activity. Native SWN source factions remain separately preserved reference records. |
 | **Trade & Routes** | Explore trade and scout links, political blocs, territorial influence, and local commodity markets. |
 | **Adventure Lab** | Turn world tags into adventure seeds with patrons, opposition, complications, stakes, and rewards. |
 | **Frontier Lab** | Generate original prompts for espionage, trade, military operations, navies, cyberpunk, weird phenomena, outposts, ruins, relics, and related themes. |
@@ -228,7 +229,7 @@ From the repository root, run:
 node tests/run-audit.cjs
 ```
 
-The default audit exercises core and expanded generation, data relationships, routes, markets, faction turns, and campaign-tool output. Run `node tests/import-validation.cjs` to validate all three supplied CSV exports and the native JSON fixture. To increase the workload, use environment variables such as:
+The default audit exercises core and expanded generation, black-hole primary consistency, data relationships, routes, markets, faction turns, and campaign-tool output. Run `node tests/import-validation.cjs` to validate all three supplied CSV exports and the native JSON fixture. To increase the workload, use environment variables such as:
 
 ```bash
 SWN_CORE_RUNS=10000 SWN_EXPANDED_RUNS=3000 SWN_FACTION_SECTORS=60 node tests/run-audit.cjs
@@ -254,7 +255,7 @@ An offline-inline mode is also available for environments where the test browser
 E2E_INLINE=1 node tests/e2e.cjs
 ```
 
-The JSON reports document validation runs performed during development. [`tests/release-validation-report.json`](tests/release-validation-report.json) records the checks run for this updated snapshot, including grid and import coverage, a generator/faction audit, JavaScript syntax checks, local-reference checks, and the Chromium end-to-end suite. Run the commands above against the commit you intend to publish if you need to refresh the result for a later revision.
+The JSON reports document validation runs performed during development. [`tests/release-validation-report.json`](tests/release-validation-report.json) records the checks run for this updated snapshot, including grid and import coverage, a generator/faction audit, JavaScript syntax checks, local-reference checks, and the Chromium end-to-end suite. Run the commands above against the commit you intend to publish if you need to refresh the result for a later revision. The fixes in the 7 November 2026 revision are summarized in [`FIXES_2026-11-07_TEST_REPORT.md`](FIXES_2026-11-07_TEST_REPORT.md), including the imported-planet editor regression, custom faction workflow, black-hole representation, and current validation results.
 
 ## Scope and limitations
 
@@ -271,7 +272,7 @@ Sector Forge is a **campaign-generation and referee-support tool**, not an offic
 
 Sector Forge is being expanded to work with Sectors Without Number exports, but the current importer is **not yet complete feature parity** with the upstream application. The implementation and known gaps are tracked in [FEATURE_PARITY.md](FEATURE_PARITY.md).
 
-At this stage, Sector Forge supports a 10 × 12 default grid, native JSON and entity CSV import, normalized coordinate mapping, system/world conversion, preservation of original source records, explicit preserve/enrich modes, drawing of supported native navigation routes, conversion of supported layer regions, and a source-data view of exported faction records. Some upstream entity types remain source records instead of becoming fully editable Forge objects. Navigation routes remain separate from Forge trade routes, and imported SWN factions remain reference data instead of being silently run through Forge's different faction simulator.
+At this stage, Sector Forge supports a 10 × 12 default grid, native JSON and entity CSV import, normalized coordinate mapping, system/world conversion, preservation of original source records, explicit preserve/enrich modes, drawing of supported native navigation routes, conversion of supported layer regions, and a source-data view of exported faction records. Imported black-hole systems retain their distinct primary type, and imported planet edits preserve unrecognized source values. Forge campaign factions can be created and edited separately from the source SWN faction records. Some upstream entity types remain source records instead of becoming fully editable Forge objects. Navigation routes remain separate from Forge trade routes, and imported SWN factions remain reference data instead of being silently run through Forge's different faction simulator.
 
 ## License and attribution
 
@@ -286,3 +287,9 @@ Thanks to [Hamhambone's SWN Sector Generator](https://hamhambone.github.io/swn/)
 ## Feedback
 
 Found a bug, a broken link, or a generation result that looks wrong? Open an issue in this repository and include steps to reproduce the problem. For data-related problems, include a small example sector JSON file after removing private campaign notes or other sensitive information.
+
+### Choosing the right Sector Forge export
+
+Use **GM JSON** as the complete editable backup and for continuing a Sector Forge campaign. It retains campaign factions, GM notes, custom points of interest, custom orbital survey objects, and attached original SWN source data. The compressed GM URL uses the same complete sector data.
+
+Use **Player JSON** only as a censored sharing copy. It intentionally omits GM-only source data and notes, point-of-interest records, custom non-imported orbital survey objects, and campaign faction data. It is not a full-fidelity backup and should not be used when you need to preserve every editable campaign detail.

@@ -704,7 +704,8 @@ App.createSystemAtHex = function(sector, x, y) {
 	}
 	sector.systems = Array.isArray(sector.systems) ? sector.systems : [];
 	var id = App.makeUniqueId(sector.systems, 'SYS-', 2);
-	var system = {id:id, x:x, y:y, name:WorldGenerator.generateSystemName(), planets:[], pointsOfInterest:[], bodies:StarSystemGenerator.generate([], {contentDensity:'empty'}), summary:'A newly charted stellar system. Its worlds and installations have not yet been catalogued.'};
+	var initialBodies = StarSystemGenerator.generate([], {contentDensity:'empty'});
+	var system = {id:id, x:x, y:y, name:WorldGenerator.generateSystemName(), planets:[], pointsOfInterest:[], bodies:initialBodies, systemType:initialBodies.some(function(body) { return body.bodyClass === 'B'; }) ? 'blackHole' : 'star', summary:'A newly charted stellar system. Its worlds and installations have not yet been catalogued.'};
 	sector.systems.push(system);
 	App.refreshSectorAfterMapEdit(sector, system);
 	return system;
@@ -745,14 +746,21 @@ App.ensureMarketForPlanet = function(sector, system, planet) {
 App.syncSystemBodies = function(system) {
 	if (!system) return;
 	var oldBodies = Array.isArray(system.bodies) ? system.bodies : [];
-	var stars = oldBodies.filter(function(body) { return body && body.bodyClass === 'S'; });
-	var extras = oldBodies.filter(function(body) { return body && body.bodyClass !== 'S' && body.bodyClass !== 'P' && !body.planetId && (!body.worldName || body.importedFromSWN) && !body.isGeneratedWorld; });
+	var isBlackHole = system.sourceEntityType === 'blackHole' || system.systemType === 'blackHole';
+	var stars = oldBodies.filter(function(body) { return body && (isBlackHole ? body.bodyClass === 'B' : (body.bodyClass === 'S' || body.bodyClass === 'B')); });
+	var extras = oldBodies.filter(function(body) { return body && body.bodyClass !== 'S' && body.bodyClass !== 'B' && body.bodyClass !== 'P' && !body.planetId && (!body.worldName || body.importedFromSWN) && !body.isGeneratedWorld; });
 	var worlds = (system.planets || []).map(function(planet, index) {
 		planet.id = planet.id || system.id + '-W' + String(index + 1).padStart(2,'0');
 		planet.systemId = system.id;
 		return {type:'World · TL ' + (planet.techLevel || '?') + ' · ' + (planet.population || 'unknown population'), name:planet.name || ('World ' + (index + 1)), worldName:planet.name || ('World ' + (index + 1)), planetId:planet.id, bodyClass:'P', isGeneratedWorld:true};
 	});
-	if (!stars.length) stars = StarSystemGenerator.generate([], {contentDensity:'empty'}).filter(function(body) { return body.bodyClass === 'S'; });
+	if (!stars.length) {
+		var generatedPrimaries = StarSystemGenerator.generate([], {contentDensity:'empty', primaryType:isBlackHole ? 'blackHole' : undefined}).filter(function(body) { return body.bodyClass === 'S' || body.bodyClass === 'B'; });
+		stars = generatedPrimaries;
+	}
+	if (isBlackHole) system.systemType = 'blackHole';
+	else if (stars.some(function(body) { return body.bodyClass === 'B'; })) system.systemType = 'blackHole';
+	else if (system.systemType === 'blackHole') system.systemType = 'star';
 	system.bodies = stars.concat(worlds, extras);
 };
 
@@ -1020,7 +1028,16 @@ App.renderCampaignPanels = function(sector) {
 	App.renderSimpleTable(document.getElementById('factions-output'),
 		['Faction','Type','Scale','Force','Cunning','Wealth','HP','FacCreds','Goal','Homeworld','Assets'],
 		(sector.factions || []).map(function(f) { return {item:f, values:[f.name, f.type, f.scale, f.force, f.cunning, f.wealth, f.hitPoints + '/' + f.maxHitPoints, f.factionCredits, f.goal, f.homeworld, (f.assets || []).length]}; }),
-		{label:'Edit', callback:function(f) { App.editCampaignObject('Edit faction: ' + f.name, f, ['id','assets','rivals','turnLog','lastAction','maxHitPoints','schemaVersion'], function() { App.renderCampaignPanels(sector); }); }});
+		{label:'Edit', callback:function(f) {
+			var homeworldOptions = [''].concat((sector.systems || []).map(function(system) { return system.id; }));
+			App.editCampaignObject('Edit faction: ' + f.name, f, ['id','assets','rivals','turnLog','lastAction','schemaVersion'], function() {
+				var home = (sector.systems || []).find(function(system) { return system.id === f.homeworldSystemId; });
+				f.homeworld = home ? home.name : 'Unplaced';
+				(f.assets || []).filter(function(asset) { return asset.isBase || asset.type === 'Base of Influence'; }).forEach(function(asset) { asset.locationSystemId = home ? home.id : ''; asset.location = home ? home.name : 'Unplaced'; });
+				CampaignTools.recalculateInfluence(sector); CampaignTools.ensureDiplomacy(sector);
+				App.renderCampaignPanels(sector); App.displayHexmap(sector);
+			}, {homeworldSystemId:homeworldOptions});
+		}});
 	var assets = [];
 	(sector.factions || []).forEach(function(faction) {
 		(faction.assets || []).forEach(function(asset) {
@@ -1172,6 +1189,25 @@ App.bindCampaignControls = function() {
 	if (App.campaignControlsBound) return;
 	App.campaignControlsBound = true;
 	function on(id, callback) { var el = document.getElementById(id); if (el) el.addEventListener('click', function() { if (App.currentSector) callback(App.currentSector); }); }
+	on('factions-add', function(sector) {
+		sector.factions = Array.isArray(sector.factions) ? sector.factions : [];
+		var faction = CampaignTools.createCustomFaction(sector);
+		var systemOptions = [''].concat((sector.systems || []).map(function(system) { return system.id; }));
+		DynEdit.edit('Create custom faction', faction, {hide:['id','assets','rivals','turnLog','lastAction','schemaVersion'], lists:{homeworldSystemId:systemOptions}}, function(saved) {
+			if (!saved) return;
+			faction.name = String(faction.name || '').trim() || 'Unnamed faction';
+			var home = (sector.systems || []).find(function(system) { return system.id === faction.homeworldSystemId; });
+			faction.homeworld = home ? home.name : 'Unplaced';
+			(faction.assets || []).filter(function(asset) { return asset.isBase || asset.type === 'Base of Influence'; }).forEach(function(asset) { asset.locationSystemId = home ? home.id : ''; asset.location = home ? home.name : 'Unplaced'; });
+			['force','cunning','wealth'].forEach(function(stat) { faction[stat] = Math.max(0, Math.min(8, Math.round(Number(faction[stat]) || 0))); });
+			faction.maxHitPoints = Math.max(1, Math.round(Number(faction.maxHitPoints) || 10));
+			faction.hitPoints = Math.max(0, Math.min(faction.maxHitPoints, Math.round(Number(faction.hitPoints) || faction.maxHitPoints)));
+			faction.factionCredits = Math.max(0, Math.round(Number(faction.factionCredits) || 0));
+			sector.factions.push(faction);
+			CampaignTools.ensureDiplomacy(sector); CampaignTools.recalculateInfluence(sector);
+			App.renderCampaignPanels(sector); App.displayHexmap(sector); App.persistSector(sector);
+		});
+	});
 	on('factions-reroll', function(sector) { sector.factions = CampaignTools.generateFactions(sector); sector.factionTurn = 0; sector.factionNews = []; App.renderCampaignPanels(sector); App.persistSector(sector); });
 	on('faction-turn-button', function(sector) { CampaignTools.advanceFactionTurn(sector); App.renderCampaignPanels(sector); App.displayHexmap(sector); App.persistSector(sector); });
 	on('routes-reroll', function(sector) { sector.tradeRoutes = CampaignTools.generateTradeRoutes(sector); sector.polities = CampaignTools.generatePolities(sector); CampaignTools.linkCampaignRecords(sector); CampaignTools.updateMarkets(sector,sector.factionTurn||0); App.renderCampaignPanels(sector); App.displayHexmap(sector); App.persistSector(sector); });
@@ -1234,7 +1270,8 @@ App.displaySystemInspector = function(inspectorElement, system, sector) {
 	}
 	
 	let systemHeader = simpleAppend(inspectorElement, 'p');
-	simpleAppend(systemHeader, 'span', system.name + ' System ', 'inspector-system-name');
+	var isBlackHole = system.sourceEntityType === 'blackHole' || system.systemType === 'blackHole';
+	simpleAppend(systemHeader, 'span', system.name + (isBlackHole ? ' Black Hole' : ' System'), 'inspector-system-name' + (isBlackHole ? ' inspector-black-hole-label' : ' '));
 	simpleAppend(systemHeader, 'span', '(' + String(system.x).padStart(2, '0') + String(system.y).padStart(2, '0') + ')', 'secondary');
 	
 	let systemEditContainer = simpleAppend(inspectorElement, 'span', '', 'edit-zone');
@@ -1341,7 +1378,7 @@ App.displaySystemInspector = function(inspectorElement, system, sector) {
 				let title = 'Editing: ' + planet.name + ', ' + system.name + ' system';
 				DynEdit.edit(title, planet, WorldGenerator.planetTemplate, function(saved) {
 					if (!saved) return;
-					planet.description = WorldGenerator.describePlanet(planet);
+					if (!planet.sourceEntityType) planet.description = WorldGenerator.describePlanet(planet);
 					App.ensureMarketForPlanet(sector, system, planet);
 					App.refreshSectorAfterMapEdit(sector, system);
 				});
@@ -1486,7 +1523,7 @@ App.displaySystemInspector = function(inspectorElement, system, sector) {
 			row.cells[1].className = 'system-survey-name';
 			row.cells[2].className = 'system-survey-details';
 			row.setAttribute('data-body-class', String(body.bodyClass || 'N'));
-			if (!body.isGeneratedWorld && body.bodyClass !== 'S' && !body.planetId && (!body.worldName || body.importedFromSWN)) {
+			if (!body.isGeneratedWorld && body.bodyClass !== 'S' && body.bodyClass !== 'B' && !body.planetId && (!body.worldName || body.importedFromSWN)) {
 				let actions = simpleAppend(row.cells[1], 'span', '', 'edit-zone survey-row-actions');
 				appendText(actions, ' ');
 				let editBody = simpleAppend(actions, 'span', 'edit', 'textbutton');

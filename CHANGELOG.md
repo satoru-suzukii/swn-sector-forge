@@ -1,5 +1,14 @@
 # Changelog
 
+## Editor, faction and black-hole regression fixes — 7 November 2026
+
+- Fixed imported planet edits that could erase untouched SWN values when the source vocabulary did not match Forge dropdown choices. Unknown existing values are now retained as explicit options, and saving uses a complete draft so unchanged data and source metadata survive.
+- Removed live-object mutation when opening the dynamic editor. Imported planet descriptions are not replaced by generated descriptions during unrelated edits.
+- Added **Add custom faction** to the campaign Factions panel. Custom Forge factions can be created with editable details and a selected home system; base-of-influence placement, diplomacy links, influence and faction-turn behavior are initialized and retained. Existing generated factions remain editable.
+- Kept native SWN source factions as preserved reference data rather than silently converting them to Forge's distinct campaign faction model.
+- Made black holes explicit system primaries in native SWN preserve-as-is imports. They receive a dedicated black-hole survey marker, map glyph, inspector label and accessibility label instead of appearing as ordinary stars or having no primary record.
+- Added Chromium regressions for the one-field imported-planet edit, generated/custom faction editing and Acheron Rho black-hole representation.
+
 ## Import hierarchy and player-export privacy hotfix — 1 November 2026
 
 - Replaced JSON group-order-dependent child placement with parent-graph resolution. Imported children now follow parent IDs through intermediate entities (for example, asteroid base → asteroid belt → system), even when the export lists the child group first.

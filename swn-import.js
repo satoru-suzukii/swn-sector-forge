@@ -88,8 +88,15 @@ var SwnImport = (function() {
       name:record.name || ('Unnamed ' + (TYPE_LABELS[type] || type)),
       planets:[], pointsOfInterest:[], bodies:[], summary:text(attrs.description || ''),
       occupation:text(attrs.occupation || record.occupation || ''), situation:text(attrs.situation || record.situation || ''),
-      neighbors:record.neighbors || '', tags:tags, sourceAttributes:clone(attrs)
+      neighbors:record.neighbors || '', tags:tags, sourceAttributes:clone(attrs),
+      systemType:type === 'blackHole' ? 'blackHole' : 'star'
     };
+    // The primary black-hole entity is structural system identity, not an
+    // enrichment. Keep its survey marker in preserve-as-is imports as well.
+    if (type === 'blackHole') {
+      sys.bodies.push({type:'Black hole', name:' Central singularity', bodyClass:'B', isGeneratedPrimary:false,
+        sourceEntityType:'blackHole', sourceEntityId:sys.sourceId, sourceAttributes:clone(attrs)});
+    }
     sys.importedEntities = [];
     return sys;
   }

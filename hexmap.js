@@ -217,16 +217,18 @@ var Hexmap = {
     var systems = systemsList.map(function(sys){
       var c=center(sys.x,sys.y), sel=s.selectedSystem&&s.selectedSystem.id===sys.id;
       var fill = self._showFactionDomination ? (sys.controllingFactionColor || '#70e0cf') : '#70e0cf';
+      var isBlackHole = sys.sourceEntityType === 'blackHole' || sys.systemType === 'blackHole';
+      var marker = isBlackHole
+        ? '<circle class="black-hole-core" r="3.3"/><ellipse class="black-hole-disk" rx="10" ry="3.7" transform="rotate(-28)"/><ellipse class="black-hole-disk black-hole-disk-secondary" rx="7.5" ry="2.2" transform="rotate(28)"/>'
+        : '<circle class="system-core" r="'+(sel?5.3:4.1)+'" fill="'+esc(fill)+'"/><circle class="system-core-ring" r="'+(sel?8.3:6.7)+'" stroke="'+esc(fill)+'"/>' ;
       var planets = sys.planets || [];
       var name=String(sys.name||'System');
       var shortName = name.length > 9 ? name.slice(0,8)+'…' : name;
       var planetDots = planets.length ? '<g class="system-world-count"><rect x="-10" y="9" width="20" height="11" rx="5.5"/><text x="0" y="17">'+Math.min(planets.length,99)+'W</text></g>' : '';
-      return '<g class="system-node '+(sel?'is-selected':'')+'" data-system-id="'+esc(sys.id)+'" tabindex="0" role="button" aria-label="Select system '+esc(sys.name)+' at hex '+String(sys.x).padStart(2,'0')+String(sys.y).padStart(2,'0')+'" transform="translate('+c.x+' '+c.y+')">'+
+      return '<g class="system-node '+(isBlackHole?'system-node-black-hole ':'')+(sel?'is-selected':'')+'" data-system-id="'+esc(sys.id)+'" tabindex="0" role="button" aria-label="Select '+(isBlackHole?'black hole':'system')+' '+esc(sys.name)+' at hex '+String(sys.x).padStart(2,'0')+String(sys.y).padStart(2,'0')+'" transform="translate('+c.x+' '+c.y+')">'+
         '<circle class="system-hit-area" r="19" fill="transparent"/>'+
         (self._showFactionDomination && sys.controllingFactionId?'<circle class="system-control" r="17" stroke="'+esc(fill)+'"/>':'')+
-        '<circle class="system-halo" r="'+(sel?13:10)+'"/>'+
-        '<circle class="system-core" r="'+(sel?5.3:4.1)+'" fill="'+esc(fill)+'"/>'+
-        '<circle class="system-core-ring" r="'+(sel?8.3:6.7)+'" stroke="'+esc(fill)+'"/>'+planetDots+
+        '<circle class="system-halo" r="'+(sel?13:10)+'"/>'+marker+planetDots+
         '<text class="system-label" x="0" y="-13" textLength="'+Math.min(shortName.length*5.2,49)+'" lengthAdjust="spacingAndGlyphs">'+esc(shortName)+'</text>'+
       '</g>';
     }).join('');
