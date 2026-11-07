@@ -46,12 +46,16 @@ StarSystemGenerator.generate = function(worldsOrCount=[], options={}) {
 		for (var g = 0; g < requested; g++) worlds.push({name:'Uncatalogued World ' + this.romanize(g + 1), techLevel:'?', population:'unknown population'});
 	}
 	var bodies = [];
-	var primaryStar = this.pickRandom2d6(this.STAR_CLASSES);
+	var primaryStar = options && options.primaryType === 'blackHole'
+		? {name:'Black Hole', masses:[0,1,2,3,4]}
+		: this.pickRandom2d6(this.STAR_CLASSES);
 	var primaryMass = GenUtil.pickRandom(primaryStar.masses);
-	bodies.push({type:'Primary star (' + primaryStar.name + ')', name:' A', bodyClass:'S', starClass:primaryStar.name, mass:primaryMass});
+	var primaryIsBlackHole = String(primaryStar.name).toLowerCase() === 'black hole';
+	bodies.push({type:primaryIsBlackHole ? 'Black hole' : 'Primary star (' + primaryStar.name + ')', name:primaryIsBlackHole ? ' Central singularity' : ' A', bodyClass:primaryIsBlackHole ? 'B' : 'S', starClass:primaryStar.name, mass:primaryMass, isGeneratedPrimary:true});
 
-	// A subset of systems are binary/multiple-star systems.
-	var companionCount = Math.random() < 0.22 ? 1 : (Math.random() < 0.035 ? 2 : 0);
+	// A subset of systems are binary/multiple-star systems. Explicit SWN black-hole
+	// entities always retain a black-hole primary instead of becoming an ordinary star.
+	var companionCount = primaryIsBlackHole && options && options.primaryType === 'blackHole' ? 0 : (Math.random() < 0.22 ? 1 : (Math.random() < 0.035 ? 2 : 0));
 	var starLetters = 'BCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 	for (var c = 0; c < companionCount; c++) {
 		var companion = this.pickRandom2d6(this.STAR_CLASSES);

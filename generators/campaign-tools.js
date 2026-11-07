@@ -398,6 +398,34 @@ var CampaignTools = (function() {
 		return factions;
 	};
 
+	// Create one editable, campaign-compatible faction without randomizing the
+	// user's identity/details. A modest Base of Influence is supplied only when
+	// a suitable home system exists; users can change or remove it afterward.
+	Tools.createCustomFaction = function(sector) {
+		sector = sector || {};
+		var factions = Array.isArray(sector.factions) ? sector.factions : [];
+		var serial = 1, id;
+		do { id = 'FACTION-CUSTOM-' + String(serial).padStart(3, '0'); serial++; }
+		while (factions.some(function(faction) { return faction && faction.id === id; }));
+		var systems = (sector.systems || []).filter(function(system) { return system && (system.planets || []).length; });
+		var home = systems[0] || null;
+		var faction = {
+			id:id, name:'New faction', type:'Independent power', scale:'Minor power',
+			homeworldSystemId:home ? home.id : '', homeworld:home ? home.name : 'Unplaced',
+			force:1, cunning:1, wealth:1, hitPoints:10, maxHitPoints:10, factionCredits:3,
+			experience:0, primaryRating:'cunning', goal:'', tag:'', assets:[], progress:0,
+			tension:1, lastAction:'Custom faction created', turnLog:[], rivals:[],
+			color:Tools.FACTION_COLORS[factions.length % Tools.FACTION_COLORS.length]
+		};
+		if (home) {
+			var baseTemplate = {name:'Base of Influence', stat:'cunning', type:'Base of Influence', minimumRating:0, cost:10, hp:10, maintenance:0, minTech:0, attackStat:null, defenseStat:'cunning', attackDamage:'0', counterattackDamage:'0', stealth:false};
+			var base = Tools.createAsset(faction, baseTemplate, home, 1, 0);
+			base.isBase = true;
+			faction.assets.push(base);
+		}
+		return faction;
+	};
+
 	Tools.rollDamage = function(expression) {
 		var match = String(expression || '0').match(/^(\d+)d(\d+)([+-]\d+)?$/i);
 		if (!match) return Math.max(0, Number(expression) || 0);

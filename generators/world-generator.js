@@ -84,6 +84,7 @@ WorldGenerator.generate = function(options={}) {
 			system.pointsOfInterest.push(this.generatePointOfInterest());
 		}
 		system.bodies = StarSystemGenerator.generate(system.planets, {contentDensity:worldDensity});
+		if (system.bodies.some(function(body) { return body.bodyClass === 'B'; })) system.systemType = 'blackHole';
 		system.summary = system.planets.length
 			? system.planets[0].description
 			: 'An uninhabited system with unexplored orbital bodies and uncertain prospects.';
@@ -3716,7 +3717,7 @@ for (var i = 0; i < WorldGenerator.tags.length; i++) {
 }
 
 WorldGenerator.planetTemplate = {
-	hide:['id','systemId'],
+	hide:['id','systemId','sourceEntityType','sourceIsHidden','sourceAttributes','importedEntities'],
 	lists:{
 		atmosphere:WorldGenerator.atmospheres,
 		temperature:WorldGenerator.temperatures,
