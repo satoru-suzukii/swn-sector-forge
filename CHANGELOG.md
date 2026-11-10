@@ -1,5 +1,19 @@
 # Changelog
 
+## Sector Forge 1.2 — Maintenance, consistency, and GM control — 10 November 2026
+
+- Made generated trade-route recalculation deterministic. A stable minimum-spanning forest and stable secondary-edge selection replace per-refresh random route creation. Existing generated routes are reclassified when system relocation changes their distance.
+- Preserved GM-authored trade routes and their custom fields during topology recalculation. Manual routes remain in the sector when overextended and receive an explicit topology warning instead of being silently deleted. Route edits are marked with manual provenance.
+- Removed random market-price drift from ordinary refreshes. Market adjustments now derive from current trade-route access, corporate presence, faction control, and conflict; repeating the same recalculation produces the same price. Markets outside the directly changed route neighborhood are not repriced merely because the UI redraws. Direct GM price edits become the new reference price.
+- Unified operational trade-route counting between market linking and market updates. Campaign record linking no longer overwrites conflict-aware market stability, and it safely handles stale markets whose system has no remaining planet.
+- Fixed World Directory saves to process only the edited world, preserve imported SWN-authored descriptions, and synchronize the linked market's system, planet, Tech Level, and population. The dynamic table now passes the edited row record to its save callback.
+- Fixed survey rerolls so imported and GM-authored orbital objects survive. Newly generated survey bodies carry explicit generated provenance; legacy hand-created survey objects with stable IDs are retained.
+- Fixed route recalculation so it no longer regenerates or replaces political blocs.
+- Added direct diplomatic relationship editing: referees can choose the exact posture and set trust/tension directly. The existing quick **Change posture** action remains available. Manual posture changes also synchronize faction rival lists; an Alliance prevents the faction simulator from selecting the allied faction as an attack target. Saving a relationship recalculates market conditions.
+- Added a persistent Campaign Turn Log. Each faction turn archives its event snapshot; referees can add or revise GM notes on each archived turn. The referee-only history remains in GM sector archives and is omitted from player-safe exports.
+- Added a dedicated maintenance regression suite covering deterministic route generation, manual route preservation, relocation effects, no-op market idempotence, GM price overrides, survey rerolls, world/market synchronization, imported-description preservation, direct diplomacy editing, alliance-safe faction turns, persistent turn archives, and political-bloc preservation.
+- Updated the app and README release identity to 1.2.
+
 ## Editor controls and responsiveness — 7 November 2026
 
 - Fixed shared editor value handling so strings, numbers and booleans use the correct input property. Individual **Revert** and **Revert All** restore the exact values captured when the editor opened; cancel no longer triggers table-save callbacks or export work.

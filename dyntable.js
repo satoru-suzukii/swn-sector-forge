@@ -156,7 +156,7 @@ DynTable.prototype._addRowNoValidate = function(object) {
 				if (!saved) return;
 				constructRow();
 				self._validateColumns();
-				if (self.editCallback) self.editCallback();
+				if (self.editCallback) self.editCallback(object);
 			});
 		});
 		

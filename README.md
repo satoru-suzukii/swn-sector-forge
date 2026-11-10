@@ -16,7 +16,7 @@ Build a region of space, populate its worlds, connect its markets and factions, 
   <img src="https://img.shields.io/badge/HTML5-%23E34F26.svg?style=for-the-badge&logo=html5&logoColor=white" alt="HTML5" />
   <img src="https://img.shields.io/badge/CSS3-%231572B6.svg?style=for-the-badge&logo=css3&logoColor=white" alt="CSS3" />
   <img src="https://img.shields.io/badge/JavaScript-%23323330.svg?style=for-the-badge&logo=javascript&logoColor=%23F7DF1E" alt="JavaScript" />
-  <img src="https://img.shields.io/badge/Version-1.0-64748b?style=for-the-badge" alt="Version 1.0" />
+  <img src="https://img.shields.io/badge/Version-1.2-64748b?style=for-the-badge" alt="Version 1.2" />
   <img src="https://img.shields.io/badge/License-MIT-16a34a?style=for-the-badge" alt="MIT License" />
 </p>
 
@@ -140,7 +140,7 @@ The map uses a fixed viewport rather than drag-to-pan or wheel zoom. Select-and-
 | **Political Groups** | Develop movements, coalitions, and other political organizations. |
 | **Religions** | Generate faiths and ideological forces that shape worlds. |
 | **Aliens** | Create non-human life, societies, and first-contact complications. |
-| **Factions** | Manage custom Forge factions, goals, assets, upkeep, readiness, diplomacy, and turn-by-turn activity. |
+| **Factions** | Manage custom Forge factions, goals, assets, upkeep, readiness, diplomacy, and turn-by-turn activity. Faction turns are archived with generated events and editable referee notes. |
 | **Trade & Routes** | Explore trade and scout links, political blocs, territorial influence, and local commodity markets. |
 | **Adventure Lab** | Generate adventure seeds with patrons, opposition, complications, stakes, and rewards. |
 | **Frontier Lab** | Create prompts for espionage, trade, military operations, navies, cyberpunk, weird phenomena, outposts, ruins, and relics. |
@@ -301,10 +301,12 @@ The **Export & Share** workspace provides two types of export:
 │   ├── run-audit.cjs                  # Generator and data-integrity audit
 │   ├── e2e.cjs                        # Chromium browser end-to-end suite
 │   ├── export-worker.cjs              # Worker-thread export/privacy regression
+│   ├── maintenance-regressions.cjs    # Sector Forge 1.2 maintenance regressions
 │   ├── import-validation.cjs          # CSV/native JSON import checks
 │   ├── fixtures/                      # Supplied SWN CSV regression exports
 │   ├── *-validation-report.json       # Recorded validation reports
-│   └── release-validation-report.json # Packaged 1.0 release check
+│   ├── release-validation-report.json # Historical 1.0 release check
+│   └── release-validation-report-1.2.json # Sector Forge 1.2 validation record
 ├── CHANGELOG.md                       # Development history
 └── README.md                          # This file
 ```
@@ -335,9 +337,10 @@ Additional validation commands:
 ```bash
 node tests/import-validation.cjs
 node tests/export-worker.cjs
+node tests/maintenance-regressions.cjs
 ```
 
-These validate the supplied CSV exports and native JSON fixture, then execute the export worker on a separate Node worker thread and check that player-safe JSON matches the app's privacy filter.
+The import check validates supplied CSV exports and a native JSON fixture. The export check executes the worker on a separate Node worker thread and verifies that player-safe JSON matches the app's privacy filter. The maintenance suite covers deterministic route recalculation, GM-authored record preservation, market idempotence and structural reactions, world/market synchronization, survey rerolls, direct diplomacy editing, alliance-safe faction turns, and persistent turn-history records.
 
 To increase the workload, use environment variables such as:
 
@@ -374,7 +377,7 @@ The export worker is loaded dynamically from `export-worker.js` when served from
 
 ### Validation reports
 
-The repository includes recorded JSON reports for validation runs performed during development. [`tests/release-validation-report.json`](tests/release-validation-report.json) documents the checks recorded for this packaged 1.0 snapshot, including grid and import coverage, generator/faction audit, JavaScript syntax checks, local-reference checks, and the Chromium end-to-end suite.
+The repository includes recorded JSON reports for validation runs performed during development. [`tests/release-validation-report.json`](tests/release-validation-report.json) is the historical 1.0 validation record. [`tests/release-validation-report-1.2.json`](tests/release-validation-report-1.2.json) records the maintenance regressions and release checks run for this 1.2 package.
 
 Run the commands above against the exact commit you intend to publish when refreshing validation for a later revision. Supporting reports:
 
@@ -389,7 +392,7 @@ Sector Forge is a **campaign-generation and referee-support tool**, not an offic
 
 - The **Revised Edition core** profile implements the core generation concepts used by the app. It does not claim exhaustive, line-by-line parity with the entire core book or every supplement.
 - **Expanded World Generation** adds optional population estimates and related behavior. It is a campaign-generation profile, not a guarantee of exact outcomes for every table or edge case in the rules.
-- Market prices and trade behavior are original campaign estimates, not a direct transcription of *Suns of Gold* procedures.
+- Market prices and trade behavior are original campaign estimates, not a direct transcription of *Suns of Gold* procedures. Version 1.2 recalculates local market conditions deterministically from direct operational trade-route access, corporate presence, faction control, and conflict. It does not yet simulate multi-hop commodity shipments, inventories, production/consumption balances, route capacity, or full supply-and-demand price convergence; those remain future simulation work.
 - Faction simulation uses a streamlined generic asset catalog. It does not implement every official asset, ability, or edge case.
 - Frontier toolkits generate original prompts inspired by common campaign themes. Character outputs are concept dossiers, not complete rules-legal character sheets.
 - Generated results are prompts for play. Referees should review, adjust, and adjudicate them for their campaigns.
@@ -432,6 +435,6 @@ Found a bug, broken link, or generation result that looks wrong? Open an issue i
 
 **Build a sector. Shape its powers. Give your campaign somewhere to go.**
 
-<sub>Sector Forge 1.0 · Unofficial Stars Without Number campaign tool</sub>
+<sub>Sector Forge 1.2 · Unofficial Stars Without Number campaign tool</sub>
 
 </div>

@@ -353,7 +353,7 @@ App.displaySector = function(sector) {
 			system.pointsOfInterest = Array.isArray(system.pointsOfInterest) ? system.pointsOfInterest : [];
 			system.bodies = Array.isArray(system.bodies) ? system.bodies : [];
 		});
-		['corporations','religions','politicalGroups','aliens','regions','tradeRoutes','polities','markets','factions','adventures','threats','people','supplementContent','corporationMarketLinks','diplomacy','factionNews'].forEach(function(key) {
+		['corporations','religions','politicalGroups','aliens','regions','tradeRoutes','polities','markets','factions','adventures','threats','people','supplementContent','corporationMarketLinks','diplomacy','factionNews','factionTurnHistory'].forEach(function(key) {
 			if (!Array.isArray(sector[key])) sector[key] = [];
 		});
 	} else {
@@ -731,6 +731,23 @@ App.ensureMarketForPlanet = function(sector, system, planet) {
 	return generated;
 };
 
+App.rerollSystemSurvey = function(system, sector) {
+	if (!system) return [];
+	var previous = Array.isArray(system.bodies) ? system.bodies : [];
+	var preserved = previous.filter(function(body) {
+		if (!body) return false;
+		if (body.importedFromSWN || body.source === 'manual' || body.manualOverride === true || body.isManual === true) return true;
+		// Pre-1.2 hand-created survey objects already received stable IDs in the UI.
+		return !!body.id && body.bodyClass !== 'S' && body.bodyClass !== 'B' && body.bodyClass !== 'P' && !body.isGeneratedWorld;
+	});
+	var generated = StarSystemGenerator.generate(Array.isArray(system.planets) ? system.planets : [], {
+		contentDensity:(sector && sector.generationSettings && sector.generationSettings.worldDensity) || 'default'
+	});
+	generated.forEach(function(body) { if (body && !body.source) body.source = 'generated'; });
+	system.bodies = generated.concat(preserved);
+	return system.bodies;
+};
+
 App.syncSystemBodies = function(system) {
 	if (!system) return;
 	var oldBodies = Array.isArray(system.bodies) ? system.bodies : [];
@@ -756,6 +773,25 @@ App.makeUniqueId = function(items, prefix, padLength) {
 	var used = new Set((items || []).map(function(item) { return item && item.id; }).filter(Boolean));
 	var serial = 1, id; do { id = prefix + String(serial++).padStart(padLength || 2, '0'); } while (used.has(id));
 	return id;
+};
+
+// Apply a World Directory edit to the single affected world and its linked market.
+// Imported descriptions remain source-authored; generated descriptions are refreshed.
+App.applyWorldDirectoryEdit = function(sector, entry) {
+	if (!sector || !entry) return null;
+	var planet = entry.planet || entry;
+	var system = entry.system || (sector.systems || []).find(function(item) {
+		return (item.planets || []).some(function(candidate) { return candidate === planet || (planet.id && candidate.id === planet.id); });
+	});
+	if (!system || !planet) return null;
+	if (!planet.sourceEntityType && !planet.sourceId && !planet.importedFromSWN) {
+		planet.description = WorldGenerator.describePlanet(planet);
+	}
+	App.ensureMarketForPlanet(sector, system, planet);
+	CampaignTools.recalculateInfluence(sector);
+	CampaignTools.linkCampaignRecords(sector);
+	CampaignTools.updateMarkets(sector, sector.factionTurn || 0);
+	return {system:system, planet:planet};
 };
 
 App.displayWorlds = function(sector) {
@@ -795,9 +831,11 @@ App.displayWorlds = function(sector) {
 	]);
 	worldTable.enableEditing(
 		WorldGenerator.planetTemplate,
-		function() {
-			worlds.forEach(function(entry) { entry.planet.description = WorldGenerator.describePlanet(entry.planet); });
-			App.displayHexmap(sector);
+		function(entry) {
+			var changed = App.applyWorldDirectoryEdit(sector, entry);
+			if (!changed) return;
+			App.displayHexmap(sector, changed.system);
+			if (typeof App.renderCampaignPanels === 'function') App.renderCampaignPanels(sector);
 			App.persistSector(sector);
 		},
 		'planet'
@@ -1090,6 +1128,67 @@ App.editCampaignObject = function(title, object, hide, afterSave, lists) {
 	});
 };
 
+App.renderFactionTurnHistory = function(sector) {
+	var container = document.getElementById('faction-turn-history');
+	if (!container) return;
+	sector.factionTurnHistory = Array.isArray(sector.factionTurnHistory) ? sector.factionTurnHistory : [];
+	if (!sector.factionTurnHistory.length && Number(sector.factionTurn || 0) > 0 && Array.isArray(sector.factionNews) && sector.factionNews.length) {
+		CampaignTools.recordFactionTurn(sector, sector.factionTurn, sector.factionNews);
+	}
+	container.innerHTML = '';
+	var history = sector.factionTurnHistory.slice().sort(function(a, b) { return Number(b.turn) - Number(a.turn); });
+	if (!history.length) {
+		App.appendElement(container, 'p', 'No faction turns have been archived yet. Advance a faction turn to start the campaign log.', 'empty-note');
+		return;
+	}
+	history.forEach(function(record) {
+		var events = Array.isArray(record.events) ? record.events : [];
+		var card = App.appendElement(container, 'article', null, 'story-card faction-turn-log-card');
+		App.appendElement(card, 'p', 'TURN ' + Number(record.turn || 0) + ' / ' + events.length + ' EVENT' + (events.length === 1 ? '' : 'S'), 'story-kicker');
+		App.appendElement(card, 'h3', 'Faction turn ' + Number(record.turn || 0));
+		if (record.gmNotes) {
+			App.appendElement(card, 'p', record.gmNotes, 'story-summary faction-turn-gm-notes');
+		} else {
+			App.appendElement(card, 'p', 'No referee notes added.', 'story-summary faction-turn-gm-notes empty-note');
+		}
+		if (events.length) {
+			var eventList = App.appendElement(card, 'ul', null, 'faction-turn-event-list');
+			events.slice(0, 8).forEach(function(entry) {
+				var summary = (entry.factionName || 'Unknown faction') + ' — ' + (entry.action || 'Action') + ': ' + (entry.event || entry.result || 'No details');
+				App.appendElement(eventList, 'li', summary);
+			});
+			if (events.length > 8) App.appendElement(card, 'p', (events.length - 8) + ' additional events recorded.', 'empty-note');
+		} else {
+			App.appendElement(card, 'p', 'No faction events occurred during this turn.', 'empty-note');
+		}
+		var controls = App.appendElement(card, 'div', null, 'story-controls');
+		var editButton = App.appendElement(controls, 'button', 'Edit GM notes', 'textbutton campaign-action');
+		editButton.type = 'button';
+		editButton.addEventListener('click', function() {
+			controls.innerHTML = '';
+			var editor = App.appendElement(card, 'div', null, 'faction-turn-note-editor');
+			var label = App.appendElement(editor, 'label', 'Referee notes for turn ' + Number(record.turn || 0), 'field-label');
+			var note = App.appendElement(editor, 'textarea', null, 'text-input');
+			note.rows = 4;
+			note.value = String(record.gmNotes || '');
+			note.setAttribute('aria-label', 'Referee notes for turn ' + Number(record.turn || 0));
+			label.appendChild(note);
+			var actions = App.appendElement(editor, 'div', null, 'story-controls');
+			var save = App.appendElement(actions, 'button', 'Save notes', 'button button-primary');
+			save.type = 'button';
+			save.addEventListener('click', function() {
+				record.gmNotes = note.value;
+				App.persistSector(sector);
+				App.renderFactionTurnHistory(sector);
+			});
+			var cancel = App.appendElement(actions, 'button', 'Cancel', 'textbutton campaign-action');
+			cancel.type = 'button';
+			cancel.addEventListener('click', function() { App.renderFactionTurnHistory(sector); });
+			note.focus();
+		});
+	});
+};
+
 App.renderCampaignPanels = function(sector) {
 	var preserveImported = !!(sector.importMetadata && sector.importMetadata.mode === 'preserve');
 	if (window.CampaignTools && !preserveImported) { CampaignTools.recalculateInfluence(sector); CampaignTools.linkCampaignRecords(sector); }
@@ -1144,13 +1243,32 @@ App.renderCampaignPanels = function(sector) {
 	});
 	var newsElem = document.getElementById('faction-news');
 	if (!(sector.factionNews || []).length) newsElem.innerHTML = '<p class="empty-note">No faction turn has been advanced yet. Start one to generate sector news.</p>';
+	App.renderFactionTurnHistory(sector);
 
 	if (!preserveImported) CampaignTools.ensureDiplomacy(sector);
 	App.renderSimpleTable(document.getElementById('diplomacy-output'), ['Faction A','Relationship','Faction B','Trust','Tension','Latest development'], (sector.diplomacy || []).map(function(rel) {
 		var a=(sector.factions||[]).find(function(f){return f.id===rel.factionAId;})||{};
 		var b=(sector.factions||[]).find(function(f){return f.id===rel.factionBId;})||{};
 		return {item:rel,values:[a.name||rel.factionAId,rel.state,b.name||rel.factionBId,rel.trust,rel.tension,rel.lastEvent||'No recent change']};
-	}), {label:'Change posture',callback:function(rel){CampaignTools.cycleDiplomacy(sector,rel);CampaignTools.updateMarkets(sector,sector.factionTurn||0);App.renderCampaignPanels(sector);App.displayHexmap(sector);App.persistSector(sector);}});
+	}), {
+		label:'Edit',
+		callback:function(rel){
+			var before={state:rel.state,trust:Number(rel.trust||0),tension:Number(rel.tension||0),lastEvent:rel.lastEvent||''};
+			App.editCampaignObject('Edit diplomatic relationship',rel,['id','factionAId','factionBId'],function(){
+				if(CampaignTools.DIPLOMACY_STATES.indexOf(rel.state)<0)rel.state='Neutral';
+				rel.trust=Math.max(-6,Math.min(6,Math.round(Number(rel.trust)||0)));
+				rel.tension=Math.max(0,Math.min(10,Math.round(Number(rel.tension)||0)));
+				if((rel.state!==before.state||rel.trust!==before.trust||rel.tension!==before.tension)&&(!rel.lastEvent||rel.lastEvent===before.lastEvent))rel.lastEvent='Relationship manually adjusted by the referee';
+				CampaignTools.syncDiplomacyRivals(sector,rel);
+				CampaignTools.recalculateInfluence(sector);CampaignTools.linkCampaignRecords(sector);CampaignTools.updateMarkets(sector,sector.factionTurn||0);
+				App.renderCampaignPanels(sector);App.displayHexmap(sector);
+			},{state:CampaignTools.DIPLOMACY_STATES.slice()});
+		},
+		extraButtons:function(rel,cell){
+			var button=App.appendElement(cell,'button','Change posture','textbutton campaign-action diplomacy-shift-action');button.type='button';
+			button.addEventListener('click',function(){CampaignTools.cycleDiplomacy(sector,rel);CampaignTools.recalculateInfluence(sector);CampaignTools.linkCampaignRecords(sector);CampaignTools.updateMarkets(sector,sector.factionTurn||0);App.renderCampaignPanels(sector);App.displayHexmap(sector);App.persistSector(sector);});
+		}
+	});
 
 	App.renderSimpleTable(document.getElementById('influence-output'), ['System','Hex','Controller','Influence','Status','Trade links','Markets'], (sector.systems||[]).map(function(sys){
 		var top=(sys.factionInfluence||[])[0];var routes=(sector.tradeRoutes||[]).filter(function(r){return r.fromSystemId===sys.id||r.toSystemId===sys.id;}).length;var markets=(sector.markets||[]).filter(function(m){return m.systemId===sys.id;}).length;
@@ -1167,8 +1285,8 @@ App.renderCampaignPanels = function(sector) {
 	App.renderSimpleTable(document.getElementById('routes-output'), ['Route','From','To','Hexes','Type','Status'], (sector.tradeRoutes || []).map(function(route) {
 		var from = (sector.systems || []).find(function(s) { return s.id === route.fromSystemId; }) || {};
 		var to = (sector.systems || []).find(function(s) { return s.id === route.toSystemId; }) || {};
-		return {item:route, values:[route.id, from.name || route.fromSystemId, to.name || route.toSystemId, route.distance, route.kind, route.status]};
-	}), {label:'Edit', callback:function(route) { App.editCampaignObject('Edit route: ' + route.id, route, ['id','distance'], function() { var from=(sector.systems||[]).find(function(s){return s.id===route.fromSystemId;}), to=(sector.systems||[]).find(function(s){return s.id===route.toSystemId;}); if(from&&to)route.distance=CampaignTools.hexDistance(from,to); CampaignTools.linkCampaignRecords(sector); CampaignTools.updateMarkets(sector,sector.factionTurn||0); App.renderCampaignPanels(sector); App.displayHexmap(sector); }, {fromSystemId:(sector.systems||[]).map(function(s){return s.id;}),toSystemId:(sector.systems||[]).map(function(s){return s.id;})}); }});
+		return {item:route, values:[route.id, from.name || route.fromSystemId, to.name || route.toSystemId, route.distance, route.kind, route.topologyStatus === 'Overextended' ? 'Overextended · ' + route.status : route.status]};
+	}), {label:'Edit', callback:function(route) { App.editCampaignObject('Edit route: ' + route.id, route, ['id','distance','source','manualOverride','isManual','topologyStatus'], function() { var from=(sector.systems||[]).find(function(s){return s.id===route.fromSystemId;}), to=(sector.systems||[]).find(function(s){return s.id===route.toSystemId;}); if(from&&to)route.distance=CampaignTools.hexDistance(from,to); route.source='manual'; route.manualOverride=true; CampaignTools.linkCampaignRecords(sector); CampaignTools.updateMarkets(sector,sector.factionTurn||0); App.renderCampaignPanels(sector); App.displayHexmap(sector); }, {fromSystemId:(sector.systems||[]).map(function(s){return s.id;}),toSystemId:(sector.systems||[]).map(function(s){return s.id;})}); }});
 
 	var routeStatus = document.getElementById('route-status');
 	if (routeStatus) routeStatus.textContent = (sector.tradeRoutes || []).length + ' links · maximum 3-hex normal drill';
@@ -1196,7 +1314,7 @@ App.renderCampaignPanels = function(sector) {
 		var viewWorld = App.appendElement(marketActions, 'button', 'Locate world', 'textbutton campaign-action');
 		viewWorld.type = 'button'; viewWorld.addEventListener('click', function() { if (!App.focusWorld(market.planetId, market.systemId)) App.focusSystem(market.systemId); });
 		var marketTableWrap = App.appendElement(details, 'div', null, 'table-output market-table-wrap');
-		App.renderSimpleTable(marketTableWrap, ['Good','Category','Supply','Index','Local price','Market note'], market.goods.map(function(g) { return {item:g, values:[g.name, g.category, g.supply, g.priceIndex + '%', g.localPrice.toLocaleString() + ' cr', g.note]}; }), {label:'Edit', callback:function(good) { App.editCampaignObject('Edit market good: ' + good.name, good, [], function() { App.renderCampaignPanels(sector); App.persistSector(sector); }); }});
+		App.renderSimpleTable(marketTableWrap, ['Good','Category','Supply','Index','Local price','Market note'], market.goods.map(function(g) { return {item:g, values:[g.name, g.category, g.supply, g.priceIndex + '%', g.localPrice.toLocaleString() + ' cr', g.note]}; }), {label:'Edit', callback:function(good) { App.editCampaignObject('Edit market good: ' + good.name, good, ['basePriceIndex','marketStructuralModifier','previousPriceIndex'], function() { App.renderCampaignPanels(sector); App.persistSector(sector); }); }});
 	});
 	if (!(sector.markets || []).length) App.appendElement(marketContainer, 'p', 'No markets generated for this sector.', 'empty-note');
 
@@ -1280,7 +1398,7 @@ App.bindCampaignControls = function() {
 	});
 	on('factions-reroll', function(sector) { sector.factions = CampaignTools.generateFactions(sector); sector.factionTurn = 0; sector.factionNews = []; App.renderCampaignPanels(sector); App.persistSector(sector); });
 	on('faction-turn-button', function(sector) { CampaignTools.advanceFactionTurn(sector); App.renderCampaignPanels(sector); App.displayHexmap(sector); App.persistSector(sector); });
-	on('routes-reroll', function(sector) { sector.tradeRoutes = CampaignTools.generateTradeRoutes(sector); sector.polities = CampaignTools.generatePolities(sector); CampaignTools.linkCampaignRecords(sector); CampaignTools.updateMarkets(sector,sector.factionTurn||0); App.renderCampaignPanels(sector); App.displayHexmap(sector); App.persistSector(sector); });
+	on('routes-reroll', function(sector) { sector.tradeRoutes = CampaignTools.generateTradeRoutes(sector); CampaignTools.recalculateInfluence(sector); CampaignTools.linkCampaignRecords(sector); CampaignTools.updateMarkets(sector,sector.factionTurn||0); App.renderCampaignPanels(sector); App.displayHexmap(sector); App.persistSector(sector); });
 	on('markets-reroll', function(sector) { sector.markets = CampaignTools.generateMarkets(sector); sector.corporationMarketLinks = null; CampaignTools.linkCampaignRecords(sector); CampaignTools.updateMarkets(sector, sector.factionTurn||0); App.renderCampaignPanels(sector); App.persistSector(sector); });
 	on('adventures-reroll', function(sector) { sector.adventures = CampaignTools.generateAdventureSeeds(sector, 8); App.renderCampaignPanels(sector); App.persistSector(sector); });
 	on('threats-reroll', function(sector) { sector.threats = CampaignTools.generateThreats(sector, 12); App.renderCampaignPanels(sector); App.persistSector(sector); });
@@ -1404,7 +1522,7 @@ App.displaySystemInspector = function(inspectorElement, system, sector) {
 			if (!saved) return;
 			body.type = String(body.type || 'Unclassified object').trim() || 'Unclassified object';
 			body.name = String(body.name || 'Unnamed object').trim() || 'Unnamed object';
-			body.bodyClass = 'N'; body.isGeneratedWorld = false; body.id = App.makeUniqueId(system.bodies || [], system.id + '-B', 2);
+			body.bodyClass = 'N'; body.isGeneratedWorld = false; body.source = 'manual'; body.manualOverride = true; body.id = App.makeUniqueId(system.bodies || [], system.id + '-B', 2);
 			system.bodies = Array.isArray(system.bodies) ? system.bodies : []; system.bodies.push(body);
 			App.refreshSectorAfterMapEdit(sector, system);
 		});
@@ -1554,9 +1672,7 @@ App.displaySystemInspector = function(inspectorElement, system, sector) {
 		rerollBodiesButton.setAttribute('aria-label', 'Reroll system survey');
 		
 		function rerollSurvey() {
-			var importedObjects = (system.bodies || []).filter(function(body) { return body && body.importedFromSWN; });
-			var generatedBodies = StarSystemGenerator.generate(Array.isArray(system.planets) ? system.planets : [], {contentDensity:(sector.generationSettings && sector.generationSettings.worldDensity) || 'default'});
-			system.bodies = generatedBodies.concat(importedObjects);
+			App.rerollSystemSurvey(system, sector);
 			App.persistSector(sector);
 			App.displayHexmap(sector, system);
 			App.displayWorlds(sector);
@@ -1596,7 +1712,7 @@ App.displaySystemInspector = function(inspectorElement, system, sector) {
 				let actions = simpleAppend(row.cells[1], 'span', '', 'edit-zone survey-row-actions');
 				appendText(actions, ' ');
 				let editBody = simpleAppend(actions, 'span', 'edit', 'textbutton');
-				editBody.addEventListener('click', function() { DynEdit.edit('Editing survey object: ' + (body.name || body.type), body, {hide:['bodyClass','isGeneratedWorld','planetId','worldName','id','sourceEntityId','sourceEntityType','importedFromSWN','sourceParent','sourceParentName','sourceParentEntity','sourceAttributes','generatedFields']}, function(saved) { if (saved) { body.bodyClass='N'; body.isGeneratedWorld=false; if (body.importedFromSWN) body.worldName=body.name; App.refreshSectorAfterMapEdit(sector,system); } }); });
+				editBody.addEventListener('click', function() { DynEdit.edit('Editing survey object: ' + (body.name || body.type), body, {hide:['bodyClass','isGeneratedWorld','planetId','worldName','id','sourceEntityId','sourceEntityType','importedFromSWN','sourceParent','sourceParentName','sourceParentEntity','sourceAttributes','generatedFields']}, function(saved) { if (saved) { body.bodyClass='N'; body.isGeneratedWorld=false; if (!body.importedFromSWN) { body.source='manual'; body.manualOverride=true; } if (body.importedFromSWN) body.worldName=body.name; App.refreshSectorAfterMapEdit(sector,system); } }); });
 				appendText(actions, ' | ');
 				let deleteBody = simpleAppend(actions, 'span', 'delete', 'textbutton');
 				deleteBody.addEventListener('click', function() { App.showConfirmation('Delete survey object ' + (body.name || body.type) + '?', function(confirmed) { if (!confirmed) return; system.bodies.splice(system.bodies.indexOf(body),1); App.refreshSectorAfterMapEdit(sector,system); }); });
