@@ -1,0 +1,123 @@
+{
+  "project": "Sector Forge 1.2 \u2014 maintenance, consistency, and GM control update",
+  "validation_date": "2026-11-10",
+  "overall": "PASS_WITH_ENVIRONMENT_LIMITATION",
+  "scope": "Focused 1.2 maintenance release. Fixes the reported data-loss, synchronization, route-recalculation, market-refresh, and diplomacy-editor problems. Adds a persistent faction-turn log. The larger multi-hop supply-chain and full diplomatic/economic simulation redesign remains out of scope.",
+  "static_integrity": {
+    "javascript_syntax": {
+      "result": "PASS",
+      "files_checked": 30,
+      "command": "node --check applied to all non-minified .js and .cjs files"
+    },
+    "release_identity": {
+      "result": "PASS",
+      "app_version": "1.2",
+      "readme_version": "1.2",
+      "changelog_entry": true
+    }
+  },
+  "maintenance_regressions": {
+    "result": "PASS",
+    "coverage": [
+      "deterministic trade-route recalculation without random draws",
+      "generated route classification updates after relocation",
+      "GM-authored routes and custom metadata survive recalculation and overextension",
+      "market recalculation is idempotent and reacts to actual route/control/conflict/corporate changes",
+      "manual market price changes remain the new reference price",
+      "route-access/stability calculations remain consistent and stale markets are safe",
+      "survey rerolls preserve manual and imported orbital objects",
+      "World Directory saves update only the edited world and its linked market",
+      "imported SWN descriptions remain unchanged during unrelated world edits",
+      "route recalculation does not regenerate political blocs",
+      "direct diplomacy edits synchronize faction rival references",
+      "alliances are respected by faction asset attack selection",
+      "faction turn event snapshots persist and preserve referee notes"
+    ]
+  },
+  "generator_campaign_audit": {
+    "result": "PASS",
+    "core_generation_runs": 2000,
+    "core_crashes": 0,
+    "expanded_generation_runs": 500,
+    "expanded_crashes": 0,
+    "faction_simulation_sectors": 15,
+    "faction_turns_per_sector": 12,
+    "faction_turn_crashes": 0,
+    "faction_turn_events": 1203,
+    "invalid_population": 0,
+    "missing_ids": 0,
+    "duplicate_coordinates": 0,
+    "dangling_routes": 0,
+    "bad_diplomacy_refs": 0,
+    "bad_influence_refs": 0,
+    "bad_corporate_links": 0,
+    "bad_market_route_links": 0,
+    "failures": []
+  },
+  "swn_import_validation": {
+    "result": "PASS",
+    "csv_fixtures": 3,
+    "csv_records_preserved": 553,
+    "native_json_fixture": "PASS",
+    "acheron_rho_parent_graph": "PASS",
+    "out_of_order_parent_resolution": "PASS",
+    "enrichment_preserves_source": "PASS"
+  },
+  "chromium_end_to_end": {
+    "result": "PASS",
+    "runs": 1,
+    "test_groups": 22,
+    "mode": "Offline-inline mode (E2E_INLINE=1)",
+    "browser": "Chromium",
+    "uncaught_browser_errors": 0,
+    "coverage": [
+      "sector/map generation, all 120 hexes, responsive system survey and map editing",
+      "route recalculation preserving GM routes and political blocs",
+      "no-op map refresh preserving market prices",
+      "World Directory edit, linked market synchronization and unrelated description preservation",
+      "custom and imported survey object survival after reroll",
+      "direct diplomacy posture/trust/tension editing and quick posture cycling",
+      "Alliance synchronization and alliance-safe faction attack behavior",
+      "persistent per-turn event archive, editable GM notes and GM/player export privacy",
+      "faction turns, influence, market updates and cross-record links",
+      "SWN CSV/native JSON import, source preservation and Acheron Rho parent graph",
+      "player-safe export privacy and GM JSON/compressed URL round-trip"
+    ],
+    "worker_enabled_in_browser_run": false,
+    "environment_note": "Chromium in this execution environment blocks navigation to the temporary localhost server. Offline-inline mode exercised the app and synchronous export fallback; the normal same-origin browser Worker startup and browser Worker queue stress could not be exercised here."
+  },
+  "export_worker": {
+    "result": "PASS",
+    "execution": "Node worker_threads using the exact export-worker.js source",
+    "fixture": "Acheron Rho native SWN JSON",
+    "systems": 36,
+    "source_records": 293,
+    "main_thread_dispatch_ms": 4.8,
+    "worker_completion_ms": 399.0,
+    "player_json_matches_app_censorSector_exactly": true,
+    "gm_and_player_blobs_verified": true,
+    "gm_and_player_compressed_links_decompress": true
+  },
+  "limitations": [
+    "The 1.2 market model now applies deterministic local structural effects from direct operational route access, corporate presence, faction control, and conflict. It is not yet a multi-hop commodity-flow simulation with production, consumption, inventories, shipping capacity, and supply/demand price convergence.",
+    "Diplomacy can now be edited directly and Alliance is enforced as a no-attack posture, but broader automatic diplomatic evolution and strategic faction response remain future simulation work.",
+    "The Campaign Turn Log archives faction-turn events and GM notes. Existing sector history from before 1.2 cannot be reconstructed beyond the current factionNews snapshot.",
+    "The normal same-origin browser Worker path was not exercised because local HTTP navigation is blocked by the Chromium environment policy. The exact worker source passed the separate Node worker-thread verification; the browser fallback and export round-trips passed.",
+    "No automated test suite proves the absence of every possible defect or freeze on every browser/device."
+  ],
+  "zip_integrity": {
+    "result": "PASS",
+    "root_layout": "The release archive extracts into sector-forge-1.2/",
+    "archive_crc": "PASS \u2014 unzip -t reported no compressed-data errors",
+    "files_in_archive": 84,
+    "extracted_archive_tests": [
+      "30 JavaScript/CommonJS syntax checks",
+      "node tests/maintenance-regressions.cjs",
+      "node tests/run-audit.cjs",
+      "node tests/import-validation.cjs",
+      "node tests/export-worker.cjs",
+      "E2E_INLINE=1 node tests/e2e.cjs"
+    ],
+    "extracted_archive_results": "All listed checks passed from the extracted archive. Chromium E2E completed 22 grouped checks with zero uncaught browser JavaScript errors."
+  }
+}
