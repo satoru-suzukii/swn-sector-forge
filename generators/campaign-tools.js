@@ -72,35 +72,113 @@ var CampaignTools = (function() {
 	};
 
 	Tools.generateTradeRoutes = function(sector) {
-		var systems = sector.systems || [];
+		var systems = (sector.systems || []).slice().filter(function(system) { return system && system.id; });
+		systems.sort(function(a, b) { return String(a.id).localeCompare(String(b.id)); });
+		var existingRoutes = Array.isArray(sector.tradeRoutes) ? sector.tradeRoutes : [];
 		var candidates = [];
+		var systemIds = new Set(systems.map(function(system) { return system.id; }));
+		var byKey = new Map();
+		function routeKey(a, b) { return [String(a), String(b)].sort().join('|'); }
+		function defaultKind(distance) { return distance <= 2 ? 'trade' : 'scout'; }
+		function defaultStatus(distance) { return distance <= 2 ? 'Established' : 'Surveyed'; }
+		function defaultNote(distance) { return distance === 3 ? 'Long drill; verify local drive capabilities.' : 'Short-drill connection'; }
+		function isManualRoute(route) {
+			if (!route) return false;
+			if (route.manualOverride === true || route.isManual === true || route.source === 'manual') return true;
+			// Explicit generated provenance wins over legacy heuristics. Otherwise a
+			// generated route whose distance changed can look hand-edited merely
+			// because its old kind/status no longer match the new distance.
+			if (route.source === 'generated') return false;
+			var distance = Number(route.distance);
+			if (route.kind && route.kind !== defaultKind(distance)) return true;
+			if (route.status && route.status !== defaultStatus(distance)) return true;
+			if (route.note && route.note !== defaultNote(distance)) return true;
+			var known = new Set(['id','fromSystemId','toSystemId','distance','kind','status','note','source','manualOverride','isManual','topologyStatus']);
+			return Object.keys(route).some(function(key) { return !known.has(key); });
+		}
+		existingRoutes.forEach(function(route) {
+			if (route && route.fromSystemId && route.toSystemId) byKey.set(routeKey(route.fromSystemId, route.toSystemId), route);
+		});
 		for (var i = 0; i < systems.length; i++) {
 			for (var j = i + 1; j < systems.length; j++) {
-				var d = Tools.hexDistance(systems[i], systems[j]);
-				if (d > 0 && d <= 3) candidates.push({fromSystemId:systems[i].id, toSystemId:systems[j].id, distance:d});
+				var distance = Tools.hexDistance(systems[i], systems[j]);
+				if (distance > 0 && distance <= 3) candidates.push({fromSystemId:systems[i].id, toSystemId:systems[j].id, distance:distance, key:routeKey(systems[i].id, systems[j].id)});
 			}
 		}
-		candidates.sort(function(a,b) { return a.distance - b.distance; });
-		var parent = {};
-		systems.forEach(function(system) { parent[system.id] = system.id; });
-		function root(id) { while (parent[id] !== id) { parent[id] = parent[parent[id]]; id = parent[id]; } return id; }
-		var routes = [];
-		var routeKeys = new Set();
-		function addRoute(route, kind) {
-			var key = [route.fromSystemId, route.toSystemId].sort().join('|');
-			if (routeKeys.has(key)) return;
-			routeKeys.add(key);
-			routes.push({id:'ROUTE-' + String(routes.length + 1).padStart(2, '0'), fromSystemId:route.fromSystemId, toSystemId:route.toSystemId, distance:route.distance, kind:kind || (route.distance <= 2 ? 'trade' : 'scout'), status:route.distance <= 2 ? 'Established' : 'Surveyed', note:route.distance === 3 ? 'Long drill; verify local drive capabilities.' : 'Short-drill connection'});
+		candidates.sort(function(a, b) { return a.distance - b.distance || a.key.localeCompare(b.key); });
+		var parent = new Map();
+		systems.forEach(function(system) { parent.set(system.id, system.id); });
+		function root(id) {
+			var current = id;
+			while (parent.get(current) !== current) { parent.set(current, parent.get(parent.get(current))); current = parent.get(current); }
+			return current;
 		}
-		// Minimum spanning forest within the normal drive-3 limit.
+		var selected = [];
+		var selectedKeys = new Set();
+		function addCandidate(edge) {
+			if (selectedKeys.has(edge.key)) return;
+			selectedKeys.add(edge.key); selected.push(edge);
+		}
+		// Build a deterministic minimum-spanning forest before adding redundant links.
 		candidates.forEach(function(edge) {
-			var ra = root(edge.fromSystemId), rb = root(edge.toSystemId);
-			if (ra !== rb) { parent[ra] = rb; addRoute(edge, edge.distance <= 2 ? 'trade' : 'scout'); }
+			var a = root(edge.fromSystemId), b = root(edge.toSystemId);
+			if (a !== b) { parent.set(a, b); addCandidate(edge); }
 		});
-		// Add extra links to busy corridors. Every route remains within 3 hexes.
+		function stableHash(value) {
+			var hash = 2166136261;
+			for (var n = 0; n < value.length; n++) { hash ^= value.charCodeAt(n); hash = Math.imul(hash, 16777619); }
+			return hash >>> 0;
+		}
+		// Keep redundant corridors deterministic while retaining the previous route density.
 		candidates.forEach(function(edge) {
-			var key = [edge.fromSystemId, edge.toSystemId].sort().join('|');
-			if (!routeKeys.has(key) && Math.random() < (edge.distance <= 2 ? 0.24 : 0.1)) addRoute(edge, edge.distance <= 2 ? 'trade' : 'scout');
+			if (selectedKeys.has(edge.key)) return;
+			var threshold = edge.distance <= 2 ? 24 : 10;
+			if (stableHash(edge.key) % 100 < threshold) addCandidate(edge);
+		});
+		var routes = [];
+		var usedIds = new Set();
+		function uniqueRouteId(preferred) {
+			if (preferred && !usedIds.has(preferred)) { usedIds.add(preferred); return preferred; }
+			var serial = routes.length + 1, candidate;
+			do { candidate = 'ROUTE-' + String(serial++).padStart(2, '0'); } while (usedIds.has(candidate));
+			usedIds.add(candidate); return candidate;
+		}
+		selected.forEach(function(edge) {
+			var existing = byKey.get(edge.key);
+			var manual = isManualRoute(existing);
+			var route = existing ? Object.assign({}, existing) : {};
+			route.id = uniqueRouteId(existing && existing.id);
+			route.fromSystemId = edge.fromSystemId;
+			route.toSystemId = edge.toSystemId;
+			route.distance = edge.distance;
+			if (!existing || !manual) {
+				route.kind = defaultKind(edge.distance);
+				route.status = defaultStatus(edge.distance);
+				if (!existing || !existing.note || existing.note === defaultNote(Number(existing.distance))) route.note = defaultNote(edge.distance);
+				route.source = 'generated';
+			} else {
+				route.source = 'manual';
+				route.manualOverride = true;
+				route.topologyStatus = edge.distance <= 3 ? 'Viable' : 'Overextended';
+			}
+			routes.push(route);
+		});
+		// GM-authored routes survive topology changes. Overextended links are retained
+		// with a warning state rather than silently removed.
+		existingRoutes.forEach(function(existing) {
+			if (!isManualRoute(existing)) return;
+			if (!systemIds.has(existing.fromSystemId) || !systemIds.has(existing.toSystemId)) return;
+			var key = routeKey(existing.fromSystemId, existing.toSystemId);
+			if (selectedKeys.has(key)) return;
+			var from = systems.find(function(system) { return system.id === existing.fromSystemId; });
+			var to = systems.find(function(system) { return system.id === existing.toSystemId; });
+			var retained = Object.assign({}, existing);
+			retained.id = uniqueRouteId(existing.id);
+			retained.distance = Tools.hexDistance(from, to);
+			retained.source = 'manual'; retained.manualOverride = true;
+			retained.topologyStatus = retained.distance <= 3 ? 'Viable' : 'Overextended';
+			routes.push(retained);
+			selectedKeys.add(key);
 		});
 		return routes;
 	};
@@ -171,7 +249,7 @@ var CampaignTools = (function() {
 					var supply = pick(['surplus', 'surplus', 'available', 'available', 'shortage', 'rare']);
 					var range = supply === 'surplus' ? [45, 80] : supply === 'available' ? [85, 115] : supply === 'shortage' ? [125, 175] : [180, 260];
 					var index = int(range[0], range[1]);
-					return {name:good.name, category:good.category, basePrice:good.basePrice, supply:supply, priceIndex:index, localPrice:Math.round(good.basePrice * index / 100), note:pick(['Reliable contracts', 'Seasonal fluctuation', 'Customs scrutiny', 'Middlemen dominate distribution', 'Unstable transport insurance', 'Quality varies by district'])};
+					return {name:good.name, category:good.category, basePrice:good.basePrice, supply:supply, priceIndex:index, basePriceIndex:index, marketStructuralModifier:0, localPrice:Math.round(good.basePrice * index / 100), note:pick(['Reliable contracts', 'Seasonal fluctuation', 'Customs scrutiny', 'Middlemen dominate distribution', 'Unstable transport insurance', 'Quality varies by district'])};
 				});
 				var traits = [];
 				if (planet.tag1) traits.push(planet.tag1);
@@ -216,6 +294,55 @@ var CampaignTools = (function() {
 		return sector.diplomacy;
 	};
 
+	Tools.getDiplomaticRelation = function(sector, factionAId, factionBId) {
+		if (!sector || !factionAId || !factionBId) return null;
+		return (sector.diplomacy || []).find(function(relation) {
+			return (relation.factionAId === factionAId && relation.factionBId === factionBId) ||
+				(relation.factionAId === factionBId && relation.factionBId === factionAId);
+		}) || null;
+	};
+
+	Tools.canFactionAttack = function(sector, attackerFactionId, defenderFactionId) {
+		var relation = Tools.getDiplomaticRelation(sector, attackerFactionId, defenderFactionId);
+		// A referee-authored Alliance is a binding no-attack relationship. Other
+		// postures can still lead to incidents or open hostilities in this model.
+		return !relation || relation.state !== 'Alliance';
+	};
+
+	Tools.syncDiplomacyRivals = function(sector, relation) {
+		if (!sector || !relation) return relation;
+		var a = (sector.factions || []).find(function(faction) { return faction.id === relation.factionAId; });
+		var b = (sector.factions || []).find(function(faction) { return faction.id === relation.factionBId; });
+		if (!a || !b) return relation;
+		a.rivals = Array.isArray(a.rivals) ? a.rivals : [];
+		b.rivals = Array.isArray(b.rivals) ? b.rivals : [];
+		if (relation.state === 'Rivalry' || relation.state === 'Open conflict') {
+			if (a.rivals.indexOf(b.id) < 0) a.rivals.push(b.id);
+			if (b.rivals.indexOf(a.id) < 0) b.rivals.push(a.id);
+		} else {
+			a.rivals = a.rivals.filter(function(id) { return id !== b.id; });
+			b.rivals = b.rivals.filter(function(id) { return id !== a.id; });
+		}
+		return relation;
+	};
+
+	Tools.recordFactionTurn = function(sector, turnNumber, events) {
+		if (!sector) return null;
+		sector.factionTurnHistory = Array.isArray(sector.factionTurnHistory) ? sector.factionTurnHistory : [];
+		var turn = Math.max(0, Math.floor(Number(turnNumber) || 0));
+		var record = sector.factionTurnHistory.find(function(item) { return Number(item.turn) === turn; });
+		var snapshot = JSON.parse(JSON.stringify(Array.isArray(events) ? events : []));
+		if (!record) {
+			record = {id:'FACTION-TURN-' + String(turn).padStart(4, '0'), turn:turn, events:snapshot, gmNotes:''};
+			sector.factionTurnHistory.push(record);
+		} else {
+			record.events = snapshot;
+			record.gmNotes = String(record.gmNotes || '');
+		}
+		sector.factionTurnHistory.sort(function(a, b) { return Number(a.turn) - Number(b.turn); });
+		return record;
+	};
+
 	Tools.cycleDiplomacy = function(sector, relation) {
 		if (!relation) return;
 		var states = Tools.DIPLOMACY_STATES, index = states.indexOf(relation.state);
@@ -223,12 +350,7 @@ var CampaignTools = (function() {
 		relation.lastEvent = 'Diplomatic posture changed by the referee';
 		relation.trust = Math.max(-6, Math.min(6, Number(relation.trust || 0) + (relation.state === 'Alliance' ? 2 : relation.state === 'Rivalry' || relation.state === 'Open conflict' ? -2 : 0)));
 		relation.tension = Math.max(0, Math.min(10, relation.state === 'Alliance' || relation.state === 'Trade pact' ? Number(relation.tension || 0)-2 : relation.state === 'Open conflict' ? Number(relation.tension || 0)+3 : Number(relation.tension || 0)));
-		var a=(sector.factions||[]).find(function(f){return f.id===relation.factionAId;}), b=(sector.factions||[]).find(function(f){return f.id===relation.factionBId;});
-		if (a && b) {
-			a.rivals=Array.isArray(a.rivals)?a.rivals:[]; b.rivals=Array.isArray(b.rivals)?b.rivals:[];
-			if (relation.state==='Rivalry'||relation.state==='Open conflict') { if(a.rivals.indexOf(b.id)<0)a.rivals.push(b.id);if(b.rivals.indexOf(a.id)<0)b.rivals.push(a.id); }
-			else if (relation.state==='Alliance'||relation.state==='Trade pact'||relation.state==='Neutral') { a.rivals=a.rivals.filter(function(id){return id!==b.id;});b.rivals=b.rivals.filter(function(id){return id!==a.id;}); }
-		}
+		Tools.syncDiplomacyRivals(sector, relation);
 		return relation;
 	};
 
@@ -259,14 +381,24 @@ var CampaignTools = (function() {
 		return systems;
 	};
 
+	Tools.isTradeRouteOperational = function(route) {
+		if (!route || route.kind !== 'trade' || route.topologyStatus === 'Overextended') return false;
+		return !/(closed|blocked|disrupted|suspended|inactive)/i.test(String(route.status || ''));
+	};
+
 	Tools.linkCampaignRecords = function(sector) {
 		var systems=sector.systems||[], factions=sector.factions||[], markets=sector.markets||[], corps=sector.corporations||[];
 		var systemById=new Map(systems.map(function(sys){return [sys.id,sys];}));
 		var planetById=new Map();systems.forEach(function(sys){(sys.planets||[]).forEach(function(p){planetById.set(p.id,{system:sys,planet:p});});});
 		markets.forEach(function(market,i){
 			var pair=planetById.get(market.planetId);
-			if(!pair && systems.length){var fallback=systems.find(function(sys){return sys.id===market.systemId;})||systems[i%systems.length];pair={system:fallback,planet:(fallback.planets||[])[0]};if(pair.planet)market.planetId=pair.planet.id;market.systemId=fallback.id;}
-			if(pair){market.systemId=pair.system.id;market.systemName=pair.system.name;market.planetId=pair.planet.id;market.planetName=pair.planet.name;market.techLevel=pair.planet.techLevel;market.population=pair.planet.population;}
+			if(!pair && systems.length){
+				var fallback=systems.find(function(sys){return sys.id===market.systemId;})||systems[i%systems.length];
+				var fallbackPlanet=fallback&&(fallback.planets||[])[0];
+				if(fallbackPlanet){pair={system:fallback,planet:fallbackPlanet};market.planetId=fallbackPlanet.id;}
+				if(fallback){market.systemId=fallback.id;market.systemName=fallback.name;}
+			}
+			if(pair && pair.planet){market.systemId=pair.system.id;market.systemName=pair.system.name;market.planetId=pair.planet.id;market.planetName=pair.planet.name;market.techLevel=pair.planet.techLevel;market.population=pair.planet.population;}
 			market.goods=Array.isArray(market.goods)?market.goods:[];
 		});
 		corps.forEach(function(corp,i){if(!corp.id)corp.id='CORP-'+String(i+1).padStart(3,'0');corp.linkedMarketIds=Array.isArray(corp.linkedMarketIds)?corp.linkedMarketIds:[];});
@@ -284,8 +416,8 @@ var CampaignTools = (function() {
 		markets.forEach(function(market){
 			var sys=systemById.get(market.systemId);market.routeIds=[];
 			(sector.tradeRoutes||[]).forEach(function(route){if(route.fromSystemId===market.systemId||route.toSystemId===market.systemId)market.routeIds.push(route.id);});
-			market.routeAccess=market.routeIds.length;market.controlFactionId=sys&&sys.controllingFactionId||'';market.controlFactionName=sys&&sys.controllingFactionName||'Independent';
-			market.stability=market.routeAccess>=2?'Well connected':(market.routeAccess===1?'Connected':'Isolated');
+			market.routeAccess=market.routeIds.filter(function(routeId) { var route=(sector.tradeRoutes||[]).find(function(item) { return item.id===routeId; }); return Tools.isTradeRouteOperational(route); }).length;market.controlFactionId=sys&&sys.controllingFactionId||'';market.controlFactionName=sys&&sys.controllingFactionName||'Independent';
+			// Stability is owned by updateMarkets(), which also considers conflict.
 			market.friction=Math.max(0,Math.min(10,Number(market.friction||0)));
 		});
 		// Keep all asset placements tied to stable system IDs; the visible label is derived from the record.
@@ -293,26 +425,60 @@ var CampaignTools = (function() {
 		return sector;
 	};
 
+	Tools.marketStructuralModifier = function(routeCount, corporateCount, conflict, controlled) {
+		var modifier = routeCount > 0 ? -2 : 2;
+		if (routeCount > 1) modifier -= Math.min(4, routeCount - 1);
+		if (corporateCount > 1) modifier -= 1;
+		if (conflict) modifier += 5;
+		if (controlled) modifier -= 1;
+		return modifier;
+	};
+
 	Tools.updateMarkets = function(sector, turnNumber) {
 		Tools.recalculateInfluence(sector);
 		var markets=sector.markets||[], routes=sector.tradeRoutes||[], links=sector.corporationMarketLinks||[];
+		var systems=sector.systems||[];
 		markets.forEach(function(market){
-			var routeCount=routes.filter(function(r){return r.kind==='trade'&&(r.fromSystemId===market.systemId||r.toSystemId===market.systemId);}).length;
+			var system=systems.find(function(item){return item.id===market.systemId;});
+			var relatedRoutes=routes.filter(function(route){return route.fromSystemId===market.systemId||route.toSystemId===market.systemId;});
+			var tradeRoutes=relatedRoutes.filter(Tools.isTradeRouteOperational);
 			var corporateCount=links.filter(function(link){return link.marketId===market.id;}).length;
-			var system=(sector.systems||[]).find(function(s){return s.id===market.systemId;});
-			var influence=system&&system.factionInfluence||[];var conflict=(sector.diplomacy||[]).some(function(rel){return (rel.state==='Open conflict'||rel.state==='Rivalry')&&influence.some(function(inf){return inf.factionId===rel.factionAId;})&&influence.some(function(inf){return inf.factionId===rel.factionBId;});});
-			market.routeAccess=routeCount;market.corporatePresence=corporateCount;market.controlFactionId=system&&system.controllingFactionId||'';market.controlFactionName=system&&system.controllingFactionName||'Independent';
+			var influence=system&&system.factionInfluence||[];
+			var conflict=(sector.diplomacy||[]).some(function(rel){
+				return (rel.state==='Open conflict'||rel.state==='Rivalry') &&
+					influence.some(function(inf){return inf.factionId===rel.factionAId;}) &&
+					influence.some(function(inf){return inf.factionId===rel.factionBId;});
+			});
+			var routeCount=tradeRoutes.length;
+			var controlled=!!(system&&system.controllingFactionId);
+			var modifier=Tools.marketStructuralModifier(routeCount,corporateCount,conflict,controlled);
+			market.routeIds=relatedRoutes.map(function(route){return route.id;});
+			market.routeAccess=routeCount;
+			market.corporatePresence=corporateCount;
+			market.controlFactionId=system&&system.controllingFactionId||'';
+			market.controlFactionName=system&&system.controllingFactionName||'Independent';
 			market.tradeVolume=Math.max(0,routeCount*10+corporateCount*4-(Number(market.friction||0)*2));
 			market.stability=conflict?'Disrupted':(routeCount>=2?'Well connected':routeCount===1?'Connected':'Isolated');
 			(market.goods||[]).forEach(function(good){
-				var oldPrice=Number(good.priceIndex||100), price=oldPrice, drift=int(-6,6), bonus=(routeCount>0?-2:2)+(corporateCount>1?-1:0)+(conflict?5:0)+(market.controlFactionId? -1:0);
-				price=Math.round(Math.max(40,Math.min(300,price+drift+bonus)));
-				good.priceIndex=price;good.localPrice=Math.max(1,Math.round(Number(good.basePrice||0)*price/100));
+				var current=Number.isFinite(Number(good.priceIndex))?Number(good.priceIndex):100;
+				var base=good.basePriceIndex == null ? NaN : Number(good.basePriceIndex);
+				var previousModifier=Number(good.marketStructuralModifier);
+				if (!Number.isFinite(base)) { base=current; previousModifier=0; }
+				else if (Number.isFinite(previousModifier)) {
+					// A direct GM edit to priceIndex becomes the new economic reference price.
+					var expected=Math.round(Math.max(40,Math.min(300,base+previousModifier)));
+					if (current!==expected) base=current-previousModifier;
+				}
+				good.basePriceIndex=base;
+				var price=Math.round(Math.max(40,Math.min(300,base+modifier)));
+				if (price!==current) good.previousPriceIndex=current;
+				good.priceIndex=price;
+				good.marketStructuralModifier=modifier;
+				good.localPrice=Math.max(1,Math.round(Number(good.basePrice||0)*price/100));
 				good.supply=price<80?'surplus':price<120?'available':price<180?'shortage':'rare';
-				good.trend=price>oldPrice?'Rising':price<oldPrice?'Falling':'Stable';
-				good.previousPriceIndex=oldPrice;
+				good.trend=price>current?'Rising':price<current?'Falling':'Stable';
 			});
-			market.lastUpdatedTurn=Number(turnNumber||sector.factionTurn||0);
+			market.lastUpdatedTurn=Number.isFinite(Number(turnNumber))?Number(turnNumber):Number(sector.factionTurn||0);
 		});
 		return markets;
 	};
@@ -441,7 +607,7 @@ var CampaignTools = (function() {
 		var events = [];
 		var factions = (sector.factions || []).slice();
 		var systems = sector.systems || [];
-		if (!factions.length) { sector.factionTurn = Number(sector.factionTurn || 0) + 1; sector.factionNews = []; Tools.recalculateInfluence(sector); Tools.linkCampaignRecords(sector); Tools.updateMarkets(sector, sector.factionTurn); return []; }
+		if (!factions.length) { sector.factionTurn = Number(sector.factionTurn || 0) + 1; sector.factionNews = []; Tools.recordFactionTurn(sector, sector.factionTurn, []); Tools.recalculateInfluence(sector); Tools.linkCampaignRecords(sector); Tools.updateMarkets(sector, sector.factionTurn); return []; }
 		Tools.ensureDiplomacy(sector);
 		var turn = Number(sector.factionTurn || 0) + 1;
 		// Randomized cyclic initiative, mirroring the faction-turn order procedure.
@@ -491,7 +657,7 @@ var CampaignTools = (function() {
 			usable.forEach(function(asset) {
 				if (!asset.attackStat) return;
 				factions.forEach(function(defender) {
-					if (defender.id === faction.id) return;
+					if (defender.id === faction.id || !Tools.canFactionAttack(sector, faction.id, defender.id)) return;
 					(defender.assets || []).forEach(function(target) {
 						if (target.active === false || target.stealthed || Number(target.readyOnTurn || 0) > turn) return;
 						if (target.locationSystemId && target.locationSystemId === asset.locationSystemId) attacks.push({asset:asset, defender:defender, target:target});
@@ -580,6 +746,7 @@ var CampaignTools = (function() {
 		});
 		sector.factionTurn = turn;
 		sector.factionNews = events.slice(0, 16);
+		Tools.recordFactionTurn(sector, turn, events);
 		Tools.recalculateInfluence(sector);
 		Tools.linkCampaignRecords(sector);
 		Tools.updateMarkets(sector, turn);
@@ -753,6 +920,7 @@ var CampaignTools = (function() {
 		Tools.ensureDiplomacy(sector);
 		Tools.recalculateInfluence(sector);
 		Tools.linkCampaignRecords(sector);
+		Tools.updateMarkets(sector, sector.factionTurn);
 		return sector;
 	};
 

@@ -51,7 +51,7 @@ StarSystemGenerator.generate = function(worldsOrCount=[], options={}) {
 		: this.pickRandom2d6(this.STAR_CLASSES);
 	var primaryMass = GenUtil.pickRandom(primaryStar.masses);
 	var primaryIsBlackHole = String(primaryStar.name).toLowerCase() === 'black hole';
-	bodies.push({type:primaryIsBlackHole ? 'Black hole' : 'Primary star (' + primaryStar.name + ')', name:primaryIsBlackHole ? ' Central singularity' : ' A', bodyClass:primaryIsBlackHole ? 'B' : 'S', starClass:primaryStar.name, mass:primaryMass, isGeneratedPrimary:true});
+	bodies.push({type:primaryIsBlackHole ? 'Black hole' : 'Primary star (' + primaryStar.name + ')', name:primaryIsBlackHole ? ' Central singularity' : ' A', bodyClass:primaryIsBlackHole ? 'B' : 'S', starClass:primaryStar.name, mass:primaryMass, isGeneratedPrimary:true, source:'generated'});
 
 	// A subset of systems are binary/multiple-star systems. Explicit SWN black-hole
 	// entities always retain a black-hole primary instead of becoming an ordinary star.
@@ -59,7 +59,7 @@ StarSystemGenerator.generate = function(worldsOrCount=[], options={}) {
 	var starLetters = 'BCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 	for (var c = 0; c < companionCount; c++) {
 		var companion = this.pickRandom2d6(this.STAR_CLASSES);
-		bodies.push({type:'Companion star (' + companion.name + ')', name:' ' + starLetters[c], bodyClass:'S', starClass:companion.name, mass:GenUtil.pickRandom(companion.masses)});
+		bodies.push({type:'Companion star (' + companion.name + ')', name:' ' + starLetters[c], bodyClass:'S', starClass:companion.name, mass:GenUtil.pickRandom(companion.masses), source:'generated'});
 	}
 
 	// These records are linked by planetId to the matching world directory entry.
@@ -67,7 +67,7 @@ StarSystemGenerator.generate = function(worldsOrCount=[], options={}) {
 		var descriptor = 'World';
 		if (world.techLevel != null) descriptor += ' · TL ' + world.techLevel;
 		if (world.population) descriptor += ' · ' + world.population;
-		bodies.push({type:descriptor, name:world.name || ('World ' + (index + 1)), worldName:world.name || ('World ' + (index + 1)), planetId:world.id || '', bodyClass:'P', isGeneratedWorld:true});
+		bodies.push({type:descriptor, name:world.name || ('World ' + (index + 1)), worldName:world.name || ('World ' + (index + 1)), planetId:world.id || '', bodyClass:'P', isGeneratedWorld:true, source:'generated'});
 	});
 
 	// Generate additional orbital objects without pretending they are full world
@@ -90,7 +90,7 @@ StarSystemGenerator.generate = function(worldsOrCount=[], options={}) {
 			worldNumber++;
 			name = ' ' + this.romanize(worldNumber);
 		}
-		bodies.push({type:type, name:name, bodyClass:body.bodyClass || 'N', isGeneratedWorld:false});
+		bodies.push({type:type, name:name, bodyClass:body.bodyClass || 'N', isGeneratedWorld:false, source:'generated'});
 	}
 	return bodies;
 };
