@@ -381,10 +381,8 @@ var CampaignTools = (function() {
 		return systems;
 	};
 
-	Tools.isTradeRouteOperational = function(route) {
-		if (!route || route.kind !== 'trade' || route.topologyStatus === 'Overextended') return false;
-		return !/(closed|blocked|disrupted|suspended|inactive)/i.test(String(route.status || ''));
-	};
+	// Alias the shared rule; CampaignTools and SectorSimulation expose the exact same function.
+	Tools.isTradeRouteOperational = TradeRouteRules.isOperational;
 
 	Tools.linkCampaignRecords = function(sector) {
 		var systems=sector.systems||[], factions=sector.factions||[], markets=sector.markets||[], corps=sector.corporations||[];
@@ -459,7 +457,11 @@ var CampaignTools = (function() {
 			market.controlFactionName=system&&system.controllingFactionName||'Independent';
 			market.tradeVolume=Math.max(0,routeCount*10+corporateCount*4-(Number(market.friction||0)*2));
 			market.stability=conflict?'Disrupted':(routeCount>=2?'Well connected':routeCount===1?'Connected':'Isolated');
-			(market.goods||[]).forEach(function(good){
+			var localEconomyState = typeof SectorEconomy !== 'undefined' && SectorEconomy.getMarketState ? SectorEconomy.getMarketState(sector, market.id) : null;
+			if (localEconomyState && localEconomyState.initialized && typeof SectorEconomy.syncMarketProjection === 'function') {
+				if (typeof SectorEconomy.refreshMarketDrivers === 'function') SectorEconomy.refreshMarketDrivers(sector, market);
+				SectorEconomy.syncMarketProjection(sector, market);
+			} else (market.goods||[]).forEach(function(good){
 				var current=Number.isFinite(Number(good.priceIndex))?Number(good.priceIndex):100;
 				var base=good.basePriceIndex == null ? NaN : Number(good.basePriceIndex);
 				var previousModifier=Number(good.marketStructuralModifier);
@@ -610,14 +612,46 @@ var CampaignTools = (function() {
 		if (!factions.length) { sector.factionTurn = Number(sector.factionTurn || 0) + 1; sector.factionNews = []; Tools.recordFactionTurn(sector, sector.factionTurn, []); Tools.recalculateInfluence(sector); Tools.linkCampaignRecords(sector); Tools.updateMarkets(sector, sector.factionTurn); return []; }
 		Tools.ensureDiplomacy(sector);
 		var turn = Number(sector.factionTurn || 0) + 1;
-		// Randomized cyclic initiative, mirroring the faction-turn order procedure.
-		var start = int(0, factions.length - 1);
+
+		// Each phase/scope receives a fresh stream derived from the sector seed.
+		// An unrelated draw (or a new draw in another faction/phase) cannot shift it.
+		function createTurnStream(phase, scope) {
+			if (typeof SectorSimulation === 'undefined' || !SectorSimulation.createRandomStream || !sector.simulation) {
+				throw new Error('Migrate the sector with SectorSimulation before advancing a 1.3 faction turn.');
+			}
+			return SectorSimulation.createRandomStream(sector, {turn:turn, phase:phase, scope:scope || 'sector'});
+		}
+		function streamInt(stream, minimum, maximum) {
+			return minimum + Math.floor(SectorSimulation.nextRandom(stream) * (maximum - minimum + 1));
+		}
+		function streamPick(stream, items) {
+			return items && items.length ? items[streamInt(stream, 0, items.length - 1)] : undefined;
+		}
+		function streamDamage(stream, expression) {
+			var match = String(expression || '0').match(/^(\d+)d(\d+)([+-]\d+)?$/i);
+			if (!match) return Math.max(0, Number(expression) || 0);
+			var count = Math.max(1, Number(match[1]));
+			var sides = Math.max(1, Number(match[2]));
+			var modifier = Number(match[3] || 0);
+			var total = modifier;
+			for (var i = 0; i < count; i++) total += streamInt(stream, 1, sides);
+			return Math.max(0, total);
+		}
+
+		// Initiative is isolated from every faction's own decisions.
+		var initiativeStream = createTurnStream('faction.initiative', 'sector');
+		var start = streamInt(initiativeStream, 0, factions.length - 1);
 		factions = factions.slice(start).concat(factions.slice(0, start));
 		function statValue(faction, stat) { return Math.max(0, Number(faction[stat] || 0)); }
-		function rollDie(sides) { return int(1, sides); }
 		function findSystem(id) { return systems.find(function(system) { return system.id === id; }) || null; }
 		function event(faction, action, result, detail, extra) {
 			var entry = Object.assign({turn:turn, factionId:faction.id, factionName:faction.name, action:action, result:result, event:detail, systemName:faction.homeworld || 'Unknown', systemId:faction.homeworldSystemId || ''}, extra || {});
+			if (faction.lastStrategicDecision && Number(faction.lastStrategicDecision.turn) === turn) {
+				entry.aiDecision = faction.lastStrategicDecision.action;
+				entry.aiReason = faction.lastStrategicDecision.reason;
+				entry.aiConfidence = faction.lastStrategicDecision.confidence;
+				entry.aiRisk = faction.lastStrategicDecision.risk;
+			}
 			faction.turnLog = Array.isArray(faction.turnLog) ? faction.turnLog : [];
 			faction.turnLog.unshift(entry); faction.turnLog = faction.turnLog.slice(0, 8); events.push(entry); return entry;
 		}
@@ -634,6 +668,19 @@ var CampaignTools = (function() {
 			return asset.name + ' took ' + amount + ' damage (' + asset.hp + '/' + asset.maxHp + ' HP remain).';
 		}
 		factions.forEach(function(faction) {
+			// Stable faction IDs partition these streams, so reordering factions or
+			// adding another faction does not re-roll an existing faction's decisions.
+			var scope = String(faction.id || 'unnamed-faction');
+			var actionStream = createTurnStream('faction.action', scope);
+			var homeStream = createTurnStream('faction.home', scope);
+			var attackTargetStream = createTurnStream('faction.attack-target', scope);
+			var repairTargetStream = createTurnStream('faction.repair-target', scope);
+			var purchaseStream = createTurnStream('faction.purchase', scope);
+			var expansionTargetStream = createTurnStream('faction.expansion-target', scope);
+			var incomeTargetStream = createTurnStream('faction.income-target', scope);
+			var combatStream = createTurnStream('faction.combat', scope);
+			var goalStream = createTurnStream('faction.goal', scope);
+			var assetAbilityStream = createTurnStream('faction.asset-ability', scope);
 			faction.assets = Array.isArray(faction.assets) ? faction.assets : [];
 			// Start-of-turn FacCred income, then mandatory maintenance.
 			var income = Math.ceil(statValue(faction, 'wealth') / 2) + Math.floor((statValue(faction, 'force') + statValue(faction, 'cunning')) / 4);
@@ -681,27 +728,31 @@ var CampaignTools = (function() {
 			if (expandableSystems.length) actionOptions.push('expand');
 			if (incomeAssets.length) actionOptions.push('income');
 			actionOptions.push('diplomacy');
-			var action = pick(actionOptions);
-			var home = findSystem(faction.homeworldSystemId) || pick(systems);
+			var strategicDecision = typeof SectorStrategic !== 'undefined' && SectorStrategic.chooseFactionAction ? SectorStrategic.chooseFactionAction(sector, faction, turn, {attacks:attacks, damaged:damaged, buyable:buyable, expandableSystems:expandableSystems, incomeAssets:incomeAssets}, actionStream) : null;
+			var action = strategicDecision && actionOptions.indexOf(strategicDecision.action) >= 0 ? strategicDecision.action : streamPick(actionStream, actionOptions);
+			var home = findSystem(faction.homeworldSystemId) || streamPick(homeStream, systems);
 			if (action === 'attack' && attacks.length) {
-				var engagement = pick(attacks), attacker = engagement.asset, defender = engagement.defender, target = engagement.target;
-				var attackRoll = rollDie(10) + statValue(faction, attacker.attackStat);
+				var engagement = null;
+				if (strategicDecision && strategicDecision.targets && strategicDecision.targets.attackKey) engagement = attacks.find(function(candidate) { return String(candidate.asset && candidate.asset.id || '')+'|'+String(candidate.defender && candidate.defender.id || '')+'|'+String(candidate.target && candidate.target.id || '') === strategicDecision.targets.attackKey; });
+				engagement = engagement || streamPick(attackTargetStream, attacks);
+				var attacker = engagement.asset, defender = engagement.defender, target = engagement.target;
+				var attackRoll = streamInt(combatStream, 1, 10) + statValue(faction, attacker.attackStat);
 				var defenseStat = target.defenseStat || target.stat || 'force';
-				var defenseRoll = rollDie(10) + statValue(defender, defenseStat);
+				var defenseRoll = streamInt(combatStream, 1, 10) + statValue(defender, defenseStat);
 				var resultParts = [];
 				if (attackRoll >= defenseRoll) {
-					var inflicted = Tools.rollDamage(attacker.attackDamage);
+					var inflicted = streamDamage(combatStream, attacker.attackDamage);
 					resultParts.push('Attack roll ' + attackRoll + ' vs ' + defenseRoll + ': ' + damageAsset(defender, target, inflicted));
 				}
 				// A tie means both attacks land; a defender win triggers only its counterattack.
 				if (attackRoll <= defenseRoll) {
-					var counter = Tools.rollDamage(target.counterattackDamage);
+					var counter = streamDamage(combatStream, target.counterattackDamage);
 					if (counter > 0) resultParts.push('Counterattack: ' + damageAsset(faction, attacker, counter));
 				}
 				faction.lastAction = 'Attacked ' + target.name + ' at ' + (attacker.location || 'an unknown location');
 				event(faction, 'Attack', attackRoll === defenseRoll ? 'Mutual damage' : (attackRoll > defenseRoll ? 'Success' : 'Counterattack'), resultParts.join(' '), {roll:attackRoll, opposingRoll:defenseRoll, targetFactionId:defender.id, targetFactionName:defender.name, systemId:attacker.locationSystemId, systemName:attacker.location});
 			} else if (action === 'repair' && damaged.length) {
-				var repairTarget = pick(damaged);
+				var repairTarget = (strategicDecision && strategicDecision.targets && damaged.find(function(a) { return String(a.id) === String(strategicDecision.targets.repairAssetId); })) || streamPick(repairTargetStream, damaged);
 				var repairStat = repairTarget.stat || 'wealth';
 				var repairRating = Math.max(1, statValue(faction, repairStat));
 				var restored = Math.min(repairRating, Number(repairTarget.maxHp) - Number(repairTarget.hp));
@@ -709,7 +760,7 @@ var CampaignTools = (function() {
 				faction.lastAction = 'Repaired ' + repairTarget.name;
 				event(faction, 'Repair', 'Recovered', repairTarget.name + ' restored by ' + restored + ' HP for 1 FacCred.', {systemId:repairTarget.locationSystemId, systemName:repairTarget.location});
 			} else if (action === 'buy' && buyable.length) {
-				var template = pick(buyable); var location = home;
+				var template = (strategicDecision && strategicDecision.targets && buyable.find(function(t) { return String(t.name) === String(strategicDecision.targets.buyTemplateName); })) || streamPick(purchaseStream, buyable); var location = home;
 				if (!location) location = findSystem(faction.homeworldSystemId);
 				faction.factionCredits -= Number(template.cost || 0);
 				var nextId = faction.assets.reduce(function(max, asset) { var match = String(asset.id).match(/-(\d+)$/); return Math.max(max, match ? Number(match[1]) : 0); }, 0) + 1;
@@ -718,7 +769,7 @@ var CampaignTools = (function() {
 				faction.lastAction = 'Purchased ' + template.name;
 				event(faction, 'Buy asset', 'Commissioned', template.name + ' commissioned at ' + (location ? location.name : 'an unplaced location') + '; it becomes active next turn.', {systemId:location ? location.id : '', systemName:location ? location.name : 'Unplaced'});
 			} else if (action === 'expand' && expandableSystems.length) {
-				var destination = pick(expandableSystems);
+				var destination = (strategicDecision && strategicDecision.targets && expandableSystems.find(function(sys) { return String(sys.id) === String(strategicDecision.targets.expandSystemId); })) || streamPick(expansionTargetStream, expandableSystems);
 				var baseHp = Math.min(4, Math.max(1, Number(faction.maxHitPoints || 1)));
 				var baseCost = baseHp; if (faction.factionCredits < baseCost) { baseHp = Math.max(1, Math.min(2, Number(faction.factionCredits))); baseCost = baseHp; }
 				faction.factionCredits -= baseCost;
@@ -727,16 +778,47 @@ var CampaignTools = (function() {
 				faction.lastAction = 'Expanded influence to ' + destination.name;
 				event(faction, 'Expand influence', 'Established', 'A new Base of Influence is being established at ' + destination.name + ' (' + baseHp + ' HP).', {systemId:destination.id, systemName:destination.name});
 			} else if (action === 'income' && incomeAssets.length) {
-				var incomeAsset = pick(incomeAssets);
-				var gained = Math.max(1, Number(incomeAsset.income || 1) + rollDie(3) - 1);
+				var incomeAsset = (strategicDecision && strategicDecision.targets && incomeAssets.find(function(asset) { return String(asset.id) === String(strategicDecision.targets.incomeAssetId); })) || streamPick(incomeTargetStream, incomeAssets);
+				var gained = Math.max(1, Number(incomeAsset.income || 1) + streamInt(assetAbilityStream, 1, 3) - 1);
 				faction.factionCredits = Math.min(999, Number(faction.factionCredits || 0) + gained);
 				faction.lastAction = 'Activated ' + incomeAsset.name;
 				event(faction, 'Use asset ability', 'Income', incomeAsset.name + ' generated ' + gained + ' additional FacCreds.', {systemId:incomeAsset.locationSystemId, systemName:incomeAsset.location});
+			} else if (action === 'diplomacy') {
+				var politicalResult = null, politicalError = null;
+				if (typeof SectorStrategic !== 'undefined' && SectorStrategic.resolveFactionDiplomacy) {
+					// Political records use the committed campaign turn. The legacy
+					// faction executor has not yet advanced its public counter, so
+					// temporarily expose the target turn while creating formal records.
+					var previousFactionTurn = sector.factionTurn;
+					var previousSimulationTurn = sector.simulation && sector.simulation.clock ? sector.simulation.clock.turn : undefined;
+					try {
+						sector.factionTurn = turn;
+						if (sector.simulation && sector.simulation.clock) sector.simulation.clock.turn = turn;
+						politicalResult = SectorStrategic.resolveFactionDiplomacy(sector, faction, turn, {strategicDecision:strategicDecision});
+					} catch (error) { politicalError = error; }
+					finally {
+						sector.factionTurn = previousFactionTurn;
+						if (sector.simulation && sector.simulation.clock && previousSimulationTurn !== undefined) sector.simulation.clock.turn = previousSimulationTurn;
+					}
+				}
+				if (politicalResult && politicalResult.ok) {
+					faction.lastAction = 'Political action: ' + politicalResult.action;
+					event(faction, 'Diplomacy', politicalResult.action, politicalResult.summary || politicalResult.reason, {politicalAction:politicalResult.action,treatyId:politicalResult.treatyId || '',warId:politicalResult.warId || '',systemId:home ? home.id : '',systemName:home ? home.name : 'Unknown'});
+				} else {
+					var stat = faction.primaryRating || 'cunning';
+					var roll = streamInt(goalStream, 1, 10) + statValue(faction, stat);
+					var success = roll >= 10;
+					if (success) { faction.progress = Math.min(100, Number(faction.progress || 0) + streamInt(goalStream, 1, 3)); faction.tension = Math.max(0, Number(faction.tension || 0) - 1); }
+					else faction.tension = Math.min(10, Number(faction.tension || 0) + 1);
+					faction.lastAction = success ? 'Advanced its goal through diplomacy' : 'Hit a diplomatic or political setback';
+					var setback = politicalError ? ' Formal political action failed safely: ' + politicalError.message : (politicalResult && politicalResult.reason ? ' ' + politicalResult.reason : '');
+					event(faction, 'Pursue goal', success ? 'Success' : 'Setback', (success ? 'It advances its agenda: ' + faction.goal + '.' : 'Its effort to ' + faction.goal.toLowerCase() + ' meets resistance.') + setback, {roll:roll, systemId:home ? home.id : '', systemName:home ? home.name : 'Unknown'});
+				}
 			} else {
 				var stat = faction.primaryRating || 'cunning';
-				var roll = rollDie(10) + statValue(faction, stat);
+				var roll = streamInt(goalStream, 1, 10) + statValue(faction, stat);
 				var success = roll >= 10;
-				if (success) { faction.progress = Math.min(100, Number(faction.progress || 0) + int(1, 3)); faction.tension = Math.max(0, Number(faction.tension || 0) - 1); }
+				if (success) { faction.progress = Math.min(100, Number(faction.progress || 0) + streamInt(goalStream, 1, 3)); faction.tension = Math.max(0, Number(faction.tension || 0) - 1); }
 				else faction.tension = Math.min(10, Number(faction.tension || 0) + 1);
 				faction.lastAction = success ? 'Advanced its goal through diplomacy' : 'Hit a diplomatic or political setback';
 				event(faction, 'Pursue goal', success ? 'Success' : 'Setback', success ? 'It advances its agenda: ' + faction.goal + '.' : 'Its effort to ' + faction.goal.toLowerCase() + ' meets resistance.', {roll:roll, systemId:home ? home.id : '', systemName:home ? home.name : 'Unknown'});

@@ -3717,7 +3717,7 @@ for (var i = 0; i < WorldGenerator.tags.length; i++) {
 }
 
 WorldGenerator.planetTemplate = {
-	hide:['id','systemId','sourceEntityType','sourceIsHidden','sourceAttributes','importedEntities'],
+	hide:['id','systemId','sourceEntityType','sourceIsHidden','sourceAttributes','importedEntities','generationMode','populationNumber','expandedPopulationType'],
 	lists:{
 		atmosphere:WorldGenerator.atmospheres,
 		temperature:WorldGenerator.temperatures,
@@ -3736,7 +3736,23 @@ WorldGenerator.planetTemplate = {
 		temperature:() => WorldGenerator.pickRandom2d6(WorldGenerator.temperatures),
 		biosphere:() => WorldGenerator.pickRandom2d6(WorldGenerator.biospheres),
 		gravity:(planet) => WorldGenerator.generateGravityForPopulation(planet && planet.population, planet && planet.populationNumber),
-		population:() => WorldGenerator.pickRandom2d6(WorldGenerator.populations).name,
+		population:(planet) => {
+			var population = WorldGenerator.pickRandom2d6(WorldGenerator.populations).name;
+			if (planet && planet.generationMode === 'expanded') {
+				var expanded = WorldGenerator.rollExpandedPopulation(population);
+				planet.populationEstimate = expanded.estimate;
+				planet.populationNumber = expanded.populationNumber;
+				planet.expandedPopulationType = expanded.type;
+				planet.techLevel = WorldGenerator.rollExpandedTech(expanded.type, expanded.populationNumber);
+				planet.gravity = WorldGenerator.generateGravityForPopulation(population, expanded.populationNumber);
+			} else if (planet && planet.generationMode === 'core') {
+				planet.populationEstimate = '';
+				planet.populationNumber = null;
+				planet.expandedPopulationType = '';
+				planet.gravity = WorldGenerator.generateGravityForPopulation(population, null);
+			}
+			return population;
+		},
 		techLevel:(planet) => planet && planet.generationMode === 'expanded' ? WorldGenerator.rollExpandedTech(planet.expandedPopulationType || 'Millions to Billions', planet.populationNumber) : WorldGenerator.pickRandom2d6(WorldGenerator.techlevels).value,
 		tag1:(planet) => GenUtil.pickRandom(WorldGenerator.tags.filter(tag => !planet || tag.name !== planet.tag2)).name,
 		tag2:(planet) => GenUtil.pickRandom(WorldGenerator.tags.filter(tag => !planet || tag.name !== planet.tag1)).name,

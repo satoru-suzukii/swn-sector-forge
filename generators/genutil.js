@@ -70,7 +70,7 @@ var GenUtil = (function() {
 	// PATTERNS
 	
 	GenUtil.generatePattern = function(pattern, data) {
-		for (name in data) {
+		for (var name in data) {
 			var regexp = new RegExp("{" + name + "}");
 			while (pattern.search(regexp) > -1) {			
 				pattern = pattern.replace(regexp, function() {

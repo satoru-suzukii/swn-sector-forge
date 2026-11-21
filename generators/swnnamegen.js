@@ -15,7 +15,7 @@ let SWNNameGen = (function() {
 	
 	let cultures = [];
 	
-	for (property in data) {
+	for (const property of Object.keys(data)) {
 		let name = data[property];
 		data[property] = {};
 		(function(property) {
@@ -29,7 +29,7 @@ let SWNNameGen = (function() {
 	}
 	
 	TextLoad.onAllLoad(function() {
-		for (property in data) {
+		for (const property of Object.keys(data)) {
 			cultures.push(data[property]);
 		}
 	});
