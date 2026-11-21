@@ -6,6 +6,11 @@ DynEdit.edit = function(title, object, template=null, callback=null) {
 	parentElem.className = 'dynedit';
 	modal.container.appendChild(parentElem);
 	let data = {};
+	let derivedValues = {};
+	let propertyDerivedDependencies = {};
+	let initialObject = {};
+	for (let initialKey in object) initialObject[initialKey] = object[initialKey];
+	let randomizableCount = 0;
 
 	simpleAppend(parentElem, 'p', title, 'dynedit-title');
 	let buttonRowElem = simpleAppend(parentElem, 'p');
@@ -17,6 +22,9 @@ DynEdit.edit = function(title, object, template=null, callback=null) {
 	revertAllButton.type = 'button';
 	revertAllButton.addEventListener('click', onRevertAll);
 
+	let randomizeStatus = simpleAppend(parentElem, 'p', '', 'dynedit-status');
+	randomizeStatus.setAttribute('role', 'status');
+	randomizeStatus.setAttribute('aria-live', 'polite');
 	let tableElem = simpleAppend(parentElem, 'table');
 
 	// Opening an editor is deliberately read-only. The live record is changed only
@@ -60,6 +68,7 @@ DynEdit.edit = function(title, object, template=null, callback=null) {
 		let randomizeButton = null;
 		let generator = template && template.generators && template.generators[property];
 		if (typeof generator === 'function') {
+			randomizableCount++;
 			propertyData.generator = generator;
 			randomizeButton = simpleAppend(rowElem, 'button', '↺', 'dynedit-randomize');
 			randomizeButton.type = 'button';
@@ -77,9 +86,13 @@ DynEdit.edit = function(title, object, template=null, callback=null) {
 		revertButton.setAttribute('aria-label', 'Revert ' + property);
 		revertButton.addEventListener('click', function(event) {
 			event.preventDefault();
-			setInputValue(inputElem, propertyData.originalValue, propertyData.type);
+			revertProperty(property);
 		});
 		appendRow(tableElem, [property + ':', inputElem, randomizeButton || '', revertButton]);
+	}
+	if (!randomizableCount) {
+		randomizeAllButton.hidden = true;
+		randomizeStatus.hidden = true;
 	}
 
 	buttonRowElem = simpleAppend(parentElem, 'p');
@@ -105,6 +118,7 @@ DynEdit.edit = function(title, object, template=null, callback=null) {
 	function currentObject() {
 		let draft = {};
 		for (let key in object) draft[key] = object[key];
+		for (let key in derivedValues) draft[key] = derivedValues[key];
 		for (let key in data) {
 			let item = data[key];
 			if (item && item.inputElem) draft[key] = readInputValue(item.inputElem, item.type, item.originalValue);
@@ -112,42 +126,77 @@ DynEdit.edit = function(title, object, template=null, callback=null) {
 		return draft;
 	}
 
+	function applyGeneratedDraft(draft, beforeDraft, property, result) {
+		let propertyItem = data[property];
+		let generatedValue = draft[property] !== beforeDraft[property] ? draft[property] : result;
+		if (propertyItem.type === 'number') generatedValue = Number(generatedValue);
+		if (propertyItem.type === 'boolean') generatedValue = !!generatedValue;
+		if (propertyItem.type === 'string') generatedValue = generatedValue == null ? '' : String(generatedValue);
+		if (propertyItem.type === 'number' && !Number.isFinite(generatedValue)) return false;
+		if (propertyItem.inputElem.tagName === 'SELECT') {
+			let optionExists = Array.prototype.some.call(propertyItem.inputElem.options, function(option) { return option.value === String(generatedValue); });
+			if (!optionExists) {
+				let option = document.createElement('option');
+				option.value = String(generatedValue);
+				option.text = String(generatedValue);
+				propertyItem.inputElem.add(option);
+			}
+		}
+		setInputValue(propertyItem.inputElem, generatedValue, propertyItem.type);
+		let changed = generatedValue !== beforeDraft[property];
+		let dependencyKeys = [];
+		Object.keys(draft).forEach(function(key) {
+			if (key === property || draft[key] === beforeDraft[key]) return;
+			changed = true;
+			dependencyKeys.push(key);
+			if (data[key]) setInputValue(data[key].inputElem, draft[key], data[key].type);
+			else derivedValues[key] = draft[key];
+		});
+		return {changed:changed, dependencyKeys:dependencyKeys};
+	}
+
+	function revertProperty(property) {
+		let item = data[property];
+		if (item) setInputValue(item.inputElem, item.originalValue, item.type);
+		(propertyDerivedDependencies[property] || []).forEach(function(key) {
+			if (data[key]) {
+				setInputValue(data[key].inputElem, data[key].originalValue, data[key].type);
+			} else if (Object.prototype.hasOwnProperty.call(initialObject, key)) {
+				derivedValues[key] = initialObject[key];
+			} else {
+				delete derivedValues[key];
+			}
+		});
+		delete propertyDerivedDependencies[property];
+	}
+
 	function randomizeProperty(property, retryForDifference) {
 		let item = data[property];
 		if (!item || typeof item.generator !== 'function') return false;
-		let before = readInputValue(item.inputElem, item.type, item.originalValue);
-		let result = before;
 		let attempts = retryForDifference ? 12 : 1;
 		try {
 			while (attempts-- > 0) {
-				result = item.generator(currentObject());
-				if (item.type === 'number') result = Number(result);
-				if (item.type === 'boolean') result = !!result;
-				if (item.type === 'string') result = result == null ? '' : String(result);
-				if (result !== before) break;
-			}
-			if (item.type === 'number' && !Number.isFinite(result)) return false;
-			if (item.inputElem.tagName === 'SELECT') {
-				let optionExists = Array.prototype.some.call(item.inputElem.options, function(option) { return option.value === String(result); });
-				if (!optionExists) {
-					let option = document.createElement('option');
-					option.value = String(result);
-					option.text = String(result);
-					item.inputElem.add(option);
+				let draft = currentObject();
+				let beforeDraft = Object.assign({}, draft);
+				let result = item.generator(draft);
+				let applied = applyGeneratedDraft(draft, beforeDraft, property, result);
+				if (applied && applied.changed) {
+					propertyDerivedDependencies[property] = Array.from(new Set((propertyDerivedDependencies[property] || []).concat(applied.dependencyKeys || [])));
+					return true;
 				}
 			}
-			setInputValue(item.inputElem, result, item.type);
-			return result !== before;
+			return false;
 		} catch (error) {
 			console.error('Randomizer failed for ' + property + ':', error);
+			randomizeStatus.textContent = 'Could not randomize ' + property + ': ' + (error && error.message ? error.message : 'generator error');
 			return false;
 		}
 	}
 
 	function onRandomizeAll() {
 		// Work from the live draft after every change so dependent generators (for
-		// example, gravity after population) see the values generated just before them.
-		let properties = Object.keys(data);
+		// example, population metadata and gravity after population) see fresh values.
+		let properties = Object.keys(data).filter(function(key) { return typeof data[key].generator === 'function'; });
 		if (data.population && data.gravity) {
 			properties = properties.filter(function(key) { return key !== 'population' && key !== 'gravity'; });
 			properties.unshift('population');
@@ -158,14 +207,19 @@ DynEdit.edit = function(title, object, template=null, callback=null) {
 			properties.push('maxHitPoints');
 			properties.push('hitPoints');
 		}
-		properties.forEach(function(property) { randomizeProperty(property, false); });
+		let changed = 0;
+		properties.forEach(function(property) { if (randomizeProperty(property, true)) changed++; });
+		randomizeStatus.textContent = changed ? 'Randomized ' + changed + ' field' + (changed === 1 ? '' : 's') + '. Review the results, then Save or Revert.' : 'No values changed. Try an individual field reroll.';
 	}
 
 	function onRevertAll() {
+		derivedValues = {};
+		propertyDerivedDependencies = {};
 		Object.keys(data).forEach(function(property) {
 			let item = data[property];
 			setInputValue(item.inputElem, item.originalValue, item.type);
 		});
+		if (randomizeStatus) randomizeStatus.textContent = 'All editable fields restored to their opening values.';
 	}
 
 	function onSave() {
@@ -183,6 +237,7 @@ DynEdit.edit = function(title, object, template=null, callback=null) {
 		DynModal.hide(modal);
 		if (callback) {
 			for (let commitKey in data) object[commitKey] = draft[commitKey];
+			Object.keys(derivedValues).forEach(function(key) { object[key] = derivedValues[key]; });
 			callback(true);
 		}
 	}

@@ -400,39 +400,64 @@ var SwnImport = (function() {
 
   // RFC-4180 style CSV reader, including quoted commas, embedded newlines, and escaped quotes.
   function parseCSV(input) {
-    var rows = [], row = [], field = '', quoted = false;
+    var rows = [], row = [], field = '', quoted = false, warnings = [], line = 1, rowStartLine = 1;
     input = String(input || '').replace(/^\uFEFF/, '');
     for (var i = 0; i < input.length; i++) {
       var c = input[i], next = input[i + 1];
       if (quoted) {
         if (c === '"' && next === '"') { field += '"'; i++; }
         else if (c === '"') quoted = false;
-        else field += c;
+        else { field += c; if (c === '\n') line++; else if (c === '\r' && next !== '\n') line++; }
       } else {
         if (c === '"' && field === '') quoted = true;
         else if (c === ',') { row.push(field); field = ''; }
         else if (c === '\n' || c === '\r') {
           if (c === '\r' && next === '\n') i++;
           row.push(field); field = '';
-          if (row.some(function(v){return String(v).trim()!=='';})) rows.push(row);
-          row = [];
+          if (row.some(function(v){return String(v).trim()!=='';})) rows.push({values:row,line:rowStartLine});
+          row = []; line++; rowStartLine = line;
         } else field += c;
       }
     }
-    if (field.length || row.length) { row.push(field); if (row.some(function(v){return String(v).trim()!=='';})) rows.push(row); }
-    if (!rows.length) throw new Error('The CSV file is empty.');
-    var headers = rows.shift().map(function(h){return h.trim();});
-    return rows.map(function(values) {
-      var result = {}; headers.forEach(function(header, index){ result[header] = text(values[index] || '').trim(); });
+    if (quoted) {
+      warnings.push('The CSV ends inside a quoted field near row ' + rowStartLine + '. The incomplete final row was not imported; the file may be truncated.');
+      row = []; field = '';
+    } else if (field.length || row.length) {
+      row.push(field);
+      if (row.some(function(v){return String(v).trim()!=='';})) rows.push({values:row,line:rowStartLine});
+    }
+    if (!rows.length) {
+      var emptyError = new Error(warnings.length ? warnings.join(' ') : 'The CSV file is empty.');
+      emptyError.csvWarnings = warnings;
+      throw emptyError;
+    }
+    var headerRecord = rows.shift(), headers = headerRecord.values.map(function(h){return h.trim();});
+    var seenHeaders = Object.create(null);
+    headers.forEach(function(header) {
+      if (!header) warnings.push('The CSV header contains a blank column name.');
+      else if (seenHeaders[header]) warnings.push('The CSV header contains the duplicate column "' + header + '".');
+      seenHeaders[header] = true;
+    });
+    var records = rows.map(function(record) {
+      var values = record.values;
+      if (values.length !== headers.length) warnings.push('CSV row ' + record.line + ' has ' + values.length + ' fields; the header has ' + headers.length + '. Missing or extra fields may indicate a truncated or malformed row.');
+      var result = {};
+      headers.forEach(function(header, index){ if (header) result[header] = text(values[index] || '').trim(); });
+      if (values.length > headers.length) result._extraColumns = values.slice(headers.length).map(function(value){return text(value).trim();});
       return result;
     });
+    Object.defineProperty(records, 'warnings', {value:warnings, enumerable:false, configurable:false});
+    return records;
   }
   function fromCSV(csv, filename, mode) {
     var rows = parseCSV(csv);
-    if (!rows.length || !rows[0].hasOwnProperty('Entity Type') || !rows[0].hasOwnProperty('Location')) {
-      throw new Error('CSV must contain the Sectors Without Number columns Name, Entity Type, and Location.');
+    if (!rows.length || !rows[0].hasOwnProperty('Entity Type') || !rows[0].hasOwnProperty('Location') || !rows[0].hasOwnProperty('Name')) {
+      var diagnostics = Array.isArray(rows.warnings) ? rows.warnings : [];
+      var headerError = new Error((diagnostics.length ? diagnostics.join(' ') + ' ' : '') + 'CSV must contain the Sectors Without Number columns Name, Entity Type, and Location.');
+      headerError.csvWarnings = diagnostics.slice();
+      throw headerError;
     }
-    var warnings = [];
+    var warnings = Array.isArray(rows.warnings) ? rows.warnings.slice() : [];
     var records = rows.map(function(row, i) {
       var coord = parseCoordinates(row.Location);
       if (!coord && row.Location) warnings.push('Row ' + (i + 2) + ' has an unrecognized location "' + row.Location + '".');

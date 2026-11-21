@@ -25,13 +25,16 @@ let TextLoad = (function() {
 	}
 	
 	TextLoad.massLoad = function(data) {
-		for (key in data) {
+		// Each request must retain its own key until its asynchronous response
+		// arrives. A shared iterator would make every callback write to the
+		// final key in the collection.
+		for (let key in data) {
 			TextLoad.load(data[key], function(result) {
 				data[key] = result;
 			});
 		}
 	}
-	
+
 	function onLoad(event, url, callback) {
 		let data = textToArray(event.target.responseText);
 		if (callback) { callback(data) };
@@ -50,16 +53,19 @@ let TextLoad = (function() {
 		requestCount--;
 		
 		if (requestCount <= 0) {
+			// Detach the completed batch before invoking it. A completion callback
+			// may start another load cycle and register a new onAllLoad callback;
+			// resetting these shared values after the callbacks would erase it.
+			requestCount = 0;
+			let completedCallbacks = callbacks;
+			callbacks = [];
 			
-			for (callback of callbacks) {
+			for (let callback of completedCallbacks) {
 				callback();
 			}
-			
-			callbacks = [];
-			requestCount = 0;
-		}		
+		}
 	}
-	
+
 	TextLoad.onAllLoad = function(callback) {
 		if (requestCount == 0) {
 			callback();

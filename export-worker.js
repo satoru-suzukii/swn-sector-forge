@@ -72,6 +72,25 @@ function describePlayerPlanet(planet) {
 	return description;
 }
 
+function censorPlayerRouteValue(value) {
+	if (Array.isArray(value)) return value.map(censorPlayerRouteValue).filter(function(item) { return item !== undefined; });
+	if (!value || typeof value !== 'object') return value;
+	var visibility = String(value.visibility || '').trim().toLowerCase();
+	if (value.gmOnly === true || value.gmPrivate === true || value.refereeOnly === true || value.isHidden === true || value.isSecret === true || value.secret === true || value.private === true || ['gm','referee','private','secret'].indexOf(visibility) >= 0) return undefined;
+	var safe = {};
+	Object.keys(value).forEach(function(key) {
+		var normalized = String(key).replace(/[^a-z0-9]/gi, '').toLowerCase();
+		if (/^(gm|gamemaster|referee|private|secret)/.test(normalized) || /^is(gm|gamemaster|referee|private|secret|hidden)/.test(normalized) || normalized === 'visibility') return;
+		var child = censorPlayerRouteValue(value[key]);
+		if (child !== undefined) safe[key] = child;
+	});
+	return safe;
+}
+
+function censorTradeRoutes(routes) {
+	return (Array.isArray(routes) ? routes : []).map(censorPlayerRouteValue).filter(function(route) { return route !== undefined; });
+}
+
 function censorSector(sector) {
 	var safe = {};
 	var hiddenIds = getHiddenEntityIds(sector);
@@ -80,9 +99,9 @@ function censorSector(sector) {
 	safe.grid = sector.grid || {columns:10, rows:12};
 	safe.schemaVersion = sector.schemaVersion || 3;
 	safe.worldGenerationMode = sector.worldGenerationMode || 'core';
-	safe.tradeRoutes = cloneJson(sector.tradeRoutes || []);
+	safe.tradeRoutes = censorTradeRoutes(sector.tradeRoutes);
 	safe.polities = (sector.polities || []).map(function(item) { return omitFields(item, ['relations', 'policy']); });
-	safe.markets = (sector.markets || []).map(function(item) { return omitFields(item, ['friction', 'traits']); });
+	safe.markets = (sector.markets || []).map(function(item) { return omitFields(item, ['friction', 'traits', 'controlFactionId', 'controlFactionName']); });
 	safe.systems = omitFieldsFromList((sector.systems || []).filter(function(system) {
 		return !system.sourceIsHidden && !hiddenIds.has(String(system.sourceId || ''));
 	}), ['pointsOfInterest','factionInfluence','controllingFactionId','controllingFactionName','controllingFactionColor','manualControllerFactionId','isContested']);
@@ -105,7 +124,7 @@ function censorSector(sector) {
 		system.bodies = omitFieldsFromList(visibleBodies, ['sourceAttributes','sourceEntityId','sourceEntityType','importedFromSWN','sourceParent','sourceParentEntity','sourceIsHidden','generatedFields']);
 		system.summary = system.planets.length ? system.planets[0].description : 'An uninhabited system with unexplored orbital bodies and uncertain prospects.';
 	}
-	safe.corporations = omitFieldsFromList(sector.corporations, ['markets','strategy','valuation']);
+	safe.corporations = omitFieldsFromList(sector.corporations, ['markets','strategy','valuation','lastStrategicAction','lastStrategicActionTurn','lastStrategicActionReason','marketOutlook','marketOutlookTurn']);
 	safe.aliens = omitFieldsFromList(sector.aliens, ['lenses','government','body']);
 	safe.religions = omitFieldsFromList(sector.religions, ['doctrine']);
 	safe.politicalGroups = omitFieldsFromList(sector.politicalGroups, ['leadership']);

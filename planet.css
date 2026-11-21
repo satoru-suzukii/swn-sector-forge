@@ -190,6 +190,14 @@ button.dyntab-button.dyntab-visible::after { position: absolute; right: 14px; bo
 .url-export { display: block; width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 6px; color: var(--text-muted); background: #080f19; font: 11px var(--font-mono); }
 .export-note { display: flex; gap: 9px; margin: 20px 0 0; color: var(--text-dim); font-size: 11px; }
 .export-note span { color: var(--amber); }
+.recovery-panel { margin-top:22px; padding:20px 22px; border:1px solid var(--line); border-radius:11px; background:rgba(12,19,31,.58); }
+.recovery-panel h3 { margin:0 0 7px; font:600 19px var(--font-display); }
+.recovery-panel .panel-description { max-width:760px; margin:0 0 14px; }
+.recovery-toggle { display:flex; align-items:flex-start; gap:9px; margin:12px 0 14px; color:var(--text); font-size:12px; line-height:1.5; cursor:pointer; }
+.recovery-toggle input { flex:0 0 auto; margin:2px 0 0; accent-color:var(--accent); }
+.recovery-panel .tool-actions { margin-bottom:10px; }
+.recovery-panel .tool-status { display:block; min-height:1.5em; line-height:1.5; }
+
 .viewer-footer { margin-top: 23px; }
 
 /* Map and inspector */
@@ -239,6 +247,54 @@ button.dyntab-button.dyntab-visible::after { position: absolute; right: 14px; bo
 .data-panel { min-width: 0; }
 .table-output { max-width: 100%; overflow: auto; border: 1px solid var(--line); border-radius: 9px; scrollbar-width: thin; scrollbar-color: var(--surface-3) transparent; }
 .dyntable { width: 100%; min-width: 740px; border-spacing: 0; border-collapse: separate; color: var(--text-muted); font-size: 12px; }
+
+/* World and alien directories contain more columns than a phone can show at
+   once. Keep their columns readable and let the existing table-output frame
+   scroll horizontally instead of squeezing words/actions into character-wide
+   cells. Explicit col widths also stabilize the table across generated data. */
+#worlds-output .dyntable { width: 100%; min-width: 1475px; table-layout: fixed; }
+#worlds-output .dyntable col:nth-child(1)  { width: 50px; }
+#worlds-output .dyntable col:nth-child(2)  { width: 105px; }
+#worlds-output .dyntable col:nth-child(3)  { width: 105px; }
+#worlds-output .dyntable col:nth-child(4)  { width: 100px; }
+#worlds-output .dyntable col:nth-child(5)  { width: 65px; }
+#worlds-output .dyntable col:nth-child(6)  { width: 80px; }
+#worlds-output .dyntable col:nth-child(7)  { width: 85px; }
+#worlds-output .dyntable col:nth-child(8)  { width: 125px; }
+#worlds-output .dyntable col:nth-child(9)  { width: 100px; }
+#worlds-output .dyntable col:nth-child(10) { width: 105px; }
+#worlds-output .dyntable col:nth-child(11) { width: 105px; }
+#worlds-output .dyntable col:nth-child(12) { width: 120px; }
+#worlds-output .dyntable col:nth-child(13) { width: 150px; }
+#worlds-output .dyntable col:nth-child(14) { width: 110px; }
+#worlds-output .dyntable col.edit-column { width: 70px; }
+/* Corporation rows also need a stable action column. The descriptive fields
+   can be long (especially Sector interests and Strategy), so give them fixed
+   room and keep the Edit action from being squeezed by content-heavy records. */
+#corporations-output .dyntable { width: 100%; min-width: 1000px; table-layout: fixed; }
+#corporations-output .dyntable col:nth-child(1) { width: 160px; }
+#corporations-output .dyntable col:nth-child(2) { width: 170px; }
+#corporations-output .dyntable col:nth-child(3) { width: 200px; }
+#corporations-output .dyntable col:nth-child(4) { width: 110px; }
+#corporations-output .dyntable col:nth-child(5) { width: 180px; }
+#corporations-output .dyntable col:nth-child(6) { width: 100px; }
+#corporations-output .dyntable col.edit-column { width: 80px; }
+#corporations-output .dyntable td { overflow-wrap: break-word; word-break: normal; hyphens: manual; }
+#corporations-output .dyntable td.edit-cell { min-width: 80px; white-space: nowrap; text-align: center; }
+#corporations-output .dyntable td.edit-cell .textbutton { display: inline-block; min-width: 38px; white-space: nowrap; overflow-wrap: normal; word-break: keep-all; }
+#aliens-output .dyntable { width: 100%; min-width: 820px; table-layout: fixed; }
+#aliens-output .dyntable col:nth-child(1) { width: 155px; }
+#aliens-output .dyntable col:nth-child(2) { width: 100px; }
+#aliens-output .dyntable col:nth-child(3) { width: 180px; }
+#aliens-output .dyntable col:nth-child(4) { width: 130px; }
+#aliens-output .dyntable col:nth-child(5) { width: 180px; }
+#aliens-output .dyntable col.edit-column { width: 75px; }
+#worlds-output .dyntable td,
+#aliens-output .dyntable td { overflow-wrap: break-word; word-break: normal; hyphens: manual; }
+#worlds-output .dyntable td.edit-cell,
+#aliens-output .dyntable td.edit-cell { min-width: 70px; white-space: nowrap; text-align: center; }
+#worlds-output .dyntable td.edit-cell .textbutton,
+#aliens-output .dyntable td.edit-cell .textbutton { display: inline-block; min-width: 34px; white-space: nowrap; overflow-wrap: normal; word-break: keep-all; }
 .dyntable td { padding: 12px 14px; border: 0; border-bottom: 1px solid rgba(157, 183, 208, .08); vertical-align: top; }
 .dyntable tbody tr { background: rgba(13, 20, 33, .45); transition: background .12s ease; }
 .dyntable tbody tr:nth-child(2n) { background: rgba(124, 155, 187, .035); }
@@ -256,6 +312,7 @@ input, select { padding: 8px 10px; }
 textarea { padding: 10px; }
 input::placeholder, textarea::placeholder { color: var(--text-dim); }
 .no-edit .edit-zone { display: none !important; }
+.no-edit .gm-only-control { display: none !important; }
 .map-edit-mode-off #inspector .edit-zone { display: none !important; }
 .textbutton { cursor: pointer; color: var(--accent); user-select: none; }
 .textbutton:hover { color: var(--accent-strong); }
@@ -266,6 +323,7 @@ input::placeholder, textarea::placeholder { color: var(--text-dim); }
 .dynmodal-container .textbutton { display: inline-flex; margin: 7px 8px 0 0; padding: 9px 14px; border: 1px solid var(--line-strong); border-radius: 6px; }
 .dynedit { width: 100%; border-spacing: 0 7px; }
 .dynedit td { vertical-align: top !important; }
+.dynedit-status { min-height: 1.2em; margin: 4px 0 10px; color: var(--text-dim); font-size: 11px; }
 .dynedit td:first-child { width: 32%; padding: 8px 12px 0 0; color: var(--text-muted); font-size: 12px; }
 .dynedit select, .dynedit input, .dynedit textarea { width: 100%; padding: 9px 10px; }
 .dynedit textarea { min-height: 80px; resize: vertical; }
@@ -587,3 +645,46 @@ input::placeholder, textarea::placeholder { color: var(--text-dim); }
 	outline: 2px solid var(--accent);
 	outline-offset: 2px;
 }
+
+
+/* Bounded, searchable campaign archives and lazy market directory */
+.archive-toolbar,.market-browser-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:10px 0 14px; min-width:0; }
+.archive-toolbar input,.market-browser-toolbar input { flex:1 1 260px; min-width:0; max-width:520px; padding:10px 12px; color:var(--text-color); background:var(--surface-1); border:1px solid var(--line-strong); border-radius:7px; font:12px var(--font-body); }
+.archive-toolbar .tool-status,.market-browser-toolbar .tool-status { flex:1 1 150px; min-width:0; }
+.archive-toolbar button,.market-browser-toolbar button { flex:0 0 auto; }
+.archive-detail { margin-top:8px; padding:9px 10px; border:1px solid var(--line); border-radius:7px; background:rgba(0,0,0,.10); min-width:0; }
+.archive-detail > summary { cursor:pointer; color:var(--accent); font:500 10px var(--font-mono); overflow-wrap:anywhere; }
+.archive-detail > *:not(summary) { overflow-wrap:anywhere; word-break:break-word; }
+.archive-load-more { grid-column:1/-1; justify-self:start; }
+.faction-turn-event-list,.chronicle-effects { min-width:0; overflow-wrap:anywhere; word-break:break-word; }
+.faction-turn-event-list li,.chronicle-event-card p,.chronicle-event-card h3 { min-width:0; overflow-wrap:anywhere; word-break:break-word; }
+.market-grid { grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; }
+.market-grid > .empty-note { grid-column:1/-1; }
+.market-card { min-width:0; max-width:100%; overflow:hidden; padding:13px; }
+.market-card > summary { display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer; list-style:none; }
+.market-card > summary::-webkit-details-marker { display:none; }
+.market-card > summary::after { content:'＋'; flex:0 0 auto; color:var(--accent); font-size:15px; }
+.market-card[open] > summary::after { content:'−'; }
+.market-card-preview { margin:8px 0 0; color:var(--text-dim); font-size:10px; line-height:1.5; overflow-wrap:anywhere; }
+.market-detail-content { min-width:0; max-width:100%; }
+.market-detail-content .story-controls { margin-top:10px; }
+.market-table-wrap { max-width:100%; overflow-x:auto; overscroll-behavior-x:contain; }
+.market-table-wrap table { min-width:840px; }
+.dyntable td,.dyntable th { overflow-wrap:anywhere; word-break:normal; }
+.chronicle-event-card,.faction-turn-log-card { min-width:0; max-width:100%; overflow:hidden; }
+.chronicle-event-card h3 { overflow-wrap:anywhere; word-break:break-word; }
+@media (max-width:760px) {
+  .market-grid { grid-template-columns:minmax(0,1fr); }
+  .market-browser-toolbar input,.archive-toolbar input { flex-basis:100%; max-width:none; }
+  .archive-toolbar .tool-status,.market-browser-toolbar .tool-status { flex-basis:100%; }
+}
+
+/* Campaign data tables: bounded rows, searchable directories, and safe long-token wrapping. */
+.data-table-toolbar{display:grid;grid-template-columns:minmax(180px,1fr) minmax(170px,auto) auto auto;align-items:center;gap:8px;margin:0 0 10px}
+.data-table-toolbar input{min-width:0;width:100%;padding:9px 11px;border:1px solid var(--line,#334155);border-radius:8px;background:var(--panel,#10151d);color:inherit}
+.data-table-toolbar button:disabled{opacity:.45;cursor:not-allowed}
+.data-table-scroll{max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain}
+.data-table-scroll .campaign-table{width:max-content;min-width:100%;table-layout:auto}
+.data-table-scroll .campaign-table th,.data-table-scroll .campaign-table td{max-width:440px;white-space:normal;overflow-wrap:anywhere;word-break:normal;vertical-align:top}
+.data-table-scroll .campaign-table td.data-table-cell{line-height:1.4}
+@media(max-width:720px){.data-table-toolbar{grid-template-columns:minmax(0,1fr) auto auto}.data-table-toolbar .tool-status{grid-column:1/-1;grid-row:2}.data-table-scroll .campaign-table th,.data-table-scroll .campaign-table td{max-width:280px}}
