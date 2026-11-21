@@ -26,7 +26,7 @@ const modules = [
   'generators/star-system-generator.js', 'generators/world-generator.js',
   'generators/corporation-generator.js', 'generators/religion-generator.js',
   'generators/political-group-generator.js', 'generators/alien-generator.js',
-  'generators/campaign-tools.js', 'app.js'
+  'simulation/trade-route-rules.js', 'generators/campaign-tools.js', 'simulation/sector-simulation.js', 'app.js'
 ];
 for (const file of modules) {
   vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context, { filename:file });
@@ -34,6 +34,11 @@ for (const file of modules) {
 const run = expression => vm.runInContext(expression, context);
 const CT = run('CampaignTools');
 const App = run('App');
+const Sim = run('SectorSimulation');
+assert.equal(CT.isTradeRouteOperational, Sim.isTradeRouteOperational, 'CampaignTools and SectorSimulation must share the exact same trade-route predicate function.');
+for (const route of [null, {}, {kind:'scout',status:'Established'}, {kind:'trade',status:'Closed'}, {kind:'trade',status:'Disrupted'}, {kind:'trade',status:'Established',topologyStatus:'Overextended'}, {kind:'trade',status:'Established'}]) {
+  assert.equal(CT.isTradeRouteOperational(route), Sim.isTradeRouteOperational(route), 'Trade-route predicate aliases must agree for every tested route shape.');
+}
 
 // 1. Route generation is stable and contains no random draws.
 const topology = {
@@ -146,8 +151,9 @@ CT.syncDiplomacyRivals(allianceSector, allianceSector.diplomacy[0]);
 assert.deepEqual(JSON.parse(JSON.stringify(allianceSector.factions.map(f => f.rivals))), [['ALLY-B'],['ALLY-A']], 'Direct Rivalry editing should synchronize faction rival lists.');
 allianceSector.diplomacy[0].state = 'Alliance';
 CT.syncDiplomacyRivals(allianceSector, allianceSector.diplomacy[0]);
+Sim.migrateSector(allianceSector, {sourceApplicationVersion:'1.3.2'});
 const savedTurnRandom = context.Math.random;
-context.Math.random = () => 0;
+context.Math.random = () => { throw new Error('Global Math.random must not be used during a migrated faction turn.'); };
 CT.advanceFactionTurn(allianceSector);
 context.Math.random = savedTurnRandom;
 assert.ok(!(allianceSector.factionNews || []).some(entry => entry.action === 'Attack'), 'Faction turn simulation selected an attack against an ally.');
@@ -159,6 +165,20 @@ CT.recordFactionTurn(allianceSector, 1, [{turn:1,action:'Updated event',event:'A
 assert.equal(allianceSector.factionTurnHistory.length, 1, 'Re-archiving the same turn should update, not duplicate, its record.');
 assert.equal(allianceSector.factionTurnHistory[0].gmNotes, 'Keep the signed corridor agreement in force.', 'Re-archiving should preserve referee notes.');
 assert.equal(allianceSector.factionTurnHistory[0].events[0].action, 'Updated event', 'The archive should retain the latest event snapshot for that turn.');
+
+const replayBase = {
+  factionTurn:0, systems:[{id:'SYS-R',name:'Replay System',x:0,y:0,planets:[]}],
+  factions:[
+    {id:'REPLAY-A',name:'Replay A',goal:'Hold position',force:1,cunning:2,wealth:1,factionCredits:5,homeworldSystemId:'SYS-R',assets:[{id:'REPLAY-A-ASSET',name:'A base',isBase:true,defenseStat:'force',hp:4,maxHp:4,active:true,locationSystemId:'SYS-R'}]},
+    {id:'REPLAY-B',name:'Replay B',goal:'Secure resources',force:2,cunning:1,wealth:2,factionCredits:4,homeworldSystemId:'SYS-R',assets:[{id:'REPLAY-B-ASSET',name:'B base',isBase:true,defenseStat:'force',hp:4,maxHp:4,active:true,locationSystemId:'SYS-R'}]}
+  ], diplomacy:[], tradeRoutes:[], markets:[], corporations:[], corporationMarketLinks:[]
+};
+const replayA = JSON.parse(JSON.stringify(replayBase));
+const replayB = JSON.parse(JSON.stringify(replayBase));
+Sim.migrateSector(replayA, {sourceApplicationVersion:'1.3.2'});
+Sim.migrateSector(replayB, {sourceApplicationVersion:'1.3.2'});
+CT.advanceFactionTurn(replayA); CT.advanceFactionTurn(replayB);
+assert.deepEqual(JSON.parse(JSON.stringify(replayA)), JSON.parse(JSON.stringify(replayB)), 'Replaying one turn from an identical sector snapshot must reproduce identical sector state.');
 
 // 3. Link synchronization must not overwrite the conflict-aware market stability.
 economicSector.markets[0].stability = 'Disrupted';

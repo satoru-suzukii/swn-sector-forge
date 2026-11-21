@@ -17,6 +17,13 @@ const source = JSON.parse(fs.readFileSync(path.join(root, 'tests/fixtures/achero
 const sector = importContext.SwnImport.fromJSON(source, 'Acheron Rho worker test.json', 'preserve');
 sector.gmNotes = 'WORKER_GM_NOTE_SENTINEL';
 for (const key of ['tradeRoutes','polities','markets','regions','corporations','aliens','religions','politicalGroups']) if (!Array.isArray(sector[key])) sector[key] = [];
+// Export privacy regressions: market control is referee-facing, while route
+// records may contain nested private metadata or be explicitly GM-only.
+const privacyFrom = sector.systems[0] && sector.systems[0].id || 'SYSTEM-A';
+const privacyTo = sector.systems[1] && sector.systems[1].id || 'SYSTEM-B';
+sector.markets.push({id:'MARKET-PRIVACY-SENTINEL',systemId:privacyFrom,controlFactionId:'FACTION-PRIVATE-ID',controlFactionName:'Private Control Name',profile:'Public market profile'});
+sector.tradeRoutes.push({id:'PUBLIC-ROUTE-PRIVACY-SENTINEL',fromSystemId:privacyFrom,toSystemId:privacyTo,status:'Established',note:'Public route note',gmNotes:'WORKER_ROUTE_GM_NOTE_SENTINEL',refereeBriefing:'WORKER_REFEREE_ROUTE_SECRET',metadata:{publicLabel:'Public metadata',privateNotes:'WORKER_NESTED_PRIVATE_NOTE',gmBriefing:'WORKER_NESTED_GM_BRIEFING'}});
+sector.tradeRoutes.push({id:'GM-ONLY-ROUTE-PRIVACY-SENTINEL',fromSystemId:privacyFrom,toSystemId:privacyTo,status:'Secret',visibility:'gm',gmOnly:true});
 
 // Load the app's actual privacy method as the reference implementation.
 const appSource = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
@@ -72,6 +79,20 @@ const workerBootstrap = `
     assert.equal(gm.swnImport.records.length, 293, 'GM archive should retain all native source records.');
     assert.equal(player.swnImport, undefined, 'Player export should omit the referee source archive.');
     assert.equal(player.gmNotes, undefined, 'Player export should omit GM notes.');
+    const playerMarket = player.markets.find(item => item.id === 'MARKET-PRIVACY-SENTINEL');
+    assert.ok(playerMarket, 'Player export should retain the public market record.');
+    assert.equal(playerMarket.controlFactionId, undefined, 'Player export must not reveal market control faction IDs.');
+    assert.equal(playerMarket.controlFactionName, undefined, 'Player export must not reveal market control faction names.');
+    const publicRoute = player.tradeRoutes.find(item => item.id === 'PUBLIC-ROUTE-PRIVACY-SENTINEL');
+    assert.ok(publicRoute, 'Player export should retain a public route.');
+    assert.equal(publicRoute.gmNotes, undefined, 'Route GM notes must be stripped.');
+    assert.equal(publicRoute.refereeBriefing, undefined, 'Route referee briefing must be stripped.');
+    assert.equal(publicRoute.metadata.privateNotes, undefined, 'Nested private route metadata must be stripped.');
+    assert.equal(publicRoute.metadata.gmBriefing, undefined, 'Nested GM route metadata must be stripped.');
+    assert.equal(publicRoute.note, 'Public route note', 'Public route notes must remain available.');
+    assert.equal(player.tradeRoutes.some(item => item.id === 'GM-ONLY-ROUTE-PRIVACY-SENTINEL'), false, 'GM-only route records must be omitted entirely.');
+    assert.equal(gm.markets.find(item => item.id === 'MARKET-PRIVACY-SENTINEL').controlFactionName, 'Private Control Name', 'GM export must retain market control data.');
+    assert.equal(gm.tradeRoutes.find(item => item.id === 'PUBLIC-ROUTE-PRIVACY-SENTINEL').gmNotes, 'WORKER_ROUTE_GM_NOTE_SENTINEL', 'GM export must retain route GM notes.');
     assert.equal(JSON.stringify(player), JSON.stringify(expectedPlayer), 'Worker player export must exactly match App.censorSector privacy behavior.');
 
     const lzContext = vm.createContext({});

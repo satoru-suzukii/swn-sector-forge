@@ -148,4 +148,22 @@ assert.ok(!enrichedMoon.occupation && !enrichedMoon.situation, 'SWN moon entitie
 const preserveIncomplete = SwnImport.fromJSON(incomplete, 'Preserve Fixture.json', 'preserve');
 assert.ok(!preserveIncomplete.systems[0].bodies.find(body => body.sourceEntityId === 'r').occupation, 'Preserve mode must leave missing source details blank');
 console.log('PASS enrichment: fills only missing supported station details, marks Forge-generated fields, and leaves raw import unchanged');
+// Truncated CSV files must never look like successful complete imports. A
+// complete prefix is retained, but the unfinished quoted row is dropped and
+// the import result carries a visible diagnostic.
+const truncatedCsv = 'Name,Entity Type,Location\nKnown System,System,0101\n"Unfinished System,System,0202';
+const truncatedRows = SwnImport.parseCSV(truncatedCsv);
+assert.equal(truncatedRows.length, 1, 'A truncated final CSV row must not be imported as valid data.');
+assert.ok(truncatedRows.warnings.some(warning => warning.includes('ends inside a quoted field') && warning.includes('may be truncated')),
+  'The parser must report an unfinished quoted field as a truncation warning.');
+const truncatedSector = SwnImport.fromCSV(truncatedCsv, 'truncated-sector.csv', 'preserve');
+assert.equal(truncatedSector.systems.length, 1, 'A valid complete row before the truncation should remain importable.');
+assert.ok(truncatedSector.importMetadata.warnings.some(warning => warning.includes('ends inside a quoted field')),
+  'The sector import metadata must preserve parser warnings for the user.');
+const entirelyTruncated = 'Name,Entity Type,Location\n"Unfinished System,System,0101';
+assert.throws(() => SwnImport.fromCSV(entirelyTruncated, 'broken.csv', 'preserve'), error =>
+  Array.isArray(error.csvWarnings) && error.csvWarnings.some(warning => warning.includes('may be truncated')),
+  'A CSV with no complete data rows must fail with the truncation diagnostic attached.');
+console.log('PASS truncated CSV: incomplete final records are dropped and surfaced as import warnings/errors.');
+
 console.log('PASS import validation total:', totalRows, 'CSV records plus native JSON fixtures');

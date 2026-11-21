@@ -18,7 +18,7 @@ const modules = [
   'generators/star-system-generator.js','generators/world-generator.js',
   'generators/corporation-generator.js','generators/religion-generator.js',
   'generators/political-group-generator.js','generators/alien-generator.js',
-  'generators/campaign-tools.js'
+  'simulation/trade-route-rules.js','generators/campaign-tools.js','simulation/sector-simulation.js','simulation/economy-engine.js','simulation/settlement-engine.js','simulation/trade-contract-engine.js','simulation/transport-engine.js','simulation/logistics-engine.js','simulation/diplomacy-engine.js','simulation/political-engine.js','simulation/strategic-engine.js'
 ];
 for (const file of modules) vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), ctx, { filename:file });
 const run = expr => vm.runInContext(expr, ctx);
@@ -29,6 +29,24 @@ const factionSectors = Math.max(1, Number(process.env.SWN_FACTION_SECTORS || 15)
 const factionTurns = Math.max(1, Number(process.env.SWN_FACTION_TURNS || 12));
 const stats = { runs:coreRuns, crashes:0, systems:0, planets:0, duplicateCoords:0, emptySystems:0, duplicateTags:0, missingBodies:0, missingTerrain:0, missingDescriptions:0, invalidPopulation:0, missingIds:0, routesOver3:0, danglingRoutes:0, marketsMissingWorld:0, badDiplomacyRefs:0, badInfluenceRefs:0, badCorporateLinks:0, badMarketRouteLinks:0, emptyAdventure:0, emptyFaction:0, emptyThreat:0, emptyPeople:0, extraToolErrors:0 };
 const goodPopulation = new Set(['failed colony','outpost','fewer than a million inhabitants','several million inhabitants','hundreds of millions of inhabitants','billions of inhabitants','alien inhabitants']);
+const failedColonyExpanded = run("WorldGenerator.rollExpandedPopulation('failed colony')");
+assert(failedColonyExpanded.type === 'Remnant' && failedColonyExpanded.populationNumber === null && /exact population unknown/i.test(failedColonyExpanded.estimate), 'Failed-colony Expanded population must be represented as a Remnant with an unknown (null) exact population.');
+// The core profile intentionally omits supplement-only values; Expanded must
+// always include both fields. Check these contracts independently of the UI.
+for (let i=0; i<250; i++) {
+  const corePlanet = run("WorldGenerator.generatePlanet('core')");
+  if (corePlanet.generationMode !== 'core' || corePlanet.tagCandidate3 !== '' || corePlanet.populationEstimate !== '') failures.push('Core profile must not fabricate Expanded-only world fields.');
+  const expandedPlanet = run("WorldGenerator.generatePlanet('expanded')");
+  if (expandedPlanet.generationMode !== 'expanded' || !expandedPlanet.tagCandidate3 || !expandedPlanet.populationEstimate) failures.push('Expanded profile omitted a required supplemental world field.');
+}
+const alienCatalogAudit = {samples:1000,min:99,max:0,invalidRecords:0};
+for (let i=0; i<alienCatalogAudit.samples; i++) {
+  const aliens = run('AlienGenerator.generate()');
+  alienCatalogAudit.min = Math.min(alienCatalogAudit.min, aliens.length);
+  alienCatalogAudit.max = Math.max(alienCatalogAudit.max, aliens.length);
+  if (aliens.length < 3 || aliens.length > 8 || aliens.some(a=>!a || !a.name || !a.type || !a.body)) alienCatalogAudit.invalidRecords++;
+}
+assert(alienCatalogAudit.min>=3 && alienCatalogAudit.max<=8 && alienCatalogAudit.invalidRecords===0, 'Alien catalog generation must create 3–8 complete records: '+JSON.stringify(alienCatalogAudit));
 for (let i=0; i<stats.runs; i++) {
   try {
     const sector = { systems: run('WorldGenerator.generate()') };
@@ -111,6 +129,88 @@ try {
     if (!result || !result.title || !result.details) stats.extraToolErrors++;
   }
 } catch (e) { stats.extraToolErrors++; failures.push('campaign enrichment error: '+e.stack); }
+// Living-economy stress: multiple generated sectors, explicit initialization,
+// repeated local-market turns, inventory conservation, and bounded pricing.
+const economyAudit = {sectorRuns:Math.max(1, Number(process.env.SWN_ECONOMY_SECTORS || 6)), turnsPerSector:Math.max(1, Number(process.env.SWN_ECONOMY_TURNS || 8)), markets:0, systems:0, commodityAccounts:0, ledgerEntries:0, turnTimingsMs:[], shipments:0, shipmentLegs:0, deliveredShipments:0, transitLossLots:0, cargoConservationFailures:0, logisticsValidationFailures:0, financialAccounts:0, financialTransfers:0, financialValidationFailures:0, diplomacyRelationships:0, diplomacyEvents:0, diplomacyValidationFailures:0, politicalEvents:0, politicsValidationFailures:0, factionStrategyReports:0, corporateStrategyReports:0, strategyValidationFailures:0, contractsValidationFailures:0, contractRecords:0, contractLedgerEntries:0, invalidInventories:0, unbalancedLedgerLines:0, outOfRangePrices:0, crashes:0};
+for (let i=0; i<economyAudit.sectorRuns; i++) {
+  try {
+    ctx.__economySector = {
+      name:'Economy stress '+i, gmMode:true, schemaVersion:3,
+      systems:run("WorldGenerator.generate({systemDensity:'normal',worldDensity:'normal'})"),
+      corporations:run('CorporationGenerator.generate()'),
+      religions:run('ReligionGenerator.generate()'),
+      politicalGroups:run('PoliticalGroupGenerator.generate()'),
+      aliens:run('AlienGenerator.generate()'), regions:[]
+    };
+    run('CampaignTools.enrichSector(globalThis.__economySector, false)');
+    run("SectorSimulation.migrateSector(globalThis.__economySector, {sourceApplicationVersion:'1.3.8'})");
+    run('SectorEconomy.initializeSector(globalThis.__economySector)');
+    run('SectorPolitics.initialize(globalThis.__economySector)');
+    const s = ctx.__economySector;
+    economyAudit.markets += s.markets.length;
+    economyAudit.systems += s.systems.length;
+    economyAudit.commodityAccounts += s.simulation.economy.marketStates.reduce((n,state)=>n+state.inventory.length,0);
+    for (let turn=1; turn<=economyAudit.turnsPerSector; turn++) {
+      s.factionTurn = turn;
+      run('SectorSimulation.syncLegacyTurn(globalThis.__economySector)');
+      const turnStarted = process.hrtime.bigint();
+      run('SectorEconomy.advanceTurn(globalThis.__economySector, '+turn+')');
+      economyAudit.turnTimingsMs.push({systems:s.systems.length,markets:s.markets.length,turn,ms:+(Number(process.hrtime.bigint()-turnStarted)/1e6).toFixed(2)});
+    }
+    economyAudit.ledgerEntries += s.simulation.economy.ledger.length;
+    economyAudit.financialAccounts += run('SectorSettlement.getAccounts(globalThis.__economySector).length');
+    economyAudit.financialTransfers += run('SectorSettlement.getLedger(globalThis.__economySector).length');
+    if (!run('SectorSettlement.validate(globalThis.__economySector).ok')) economyAudit.financialValidationFailures++;
+    economyAudit.diplomacyRelationships += (s.diplomacy||[]).length;
+    economyAudit.diplomacyEvents += run('SectorDiplomacy.getSummary(globalThis.__economySector).events');
+    if (!run('SectorDiplomacy.validate(globalThis.__economySector).ok')) economyAudit.diplomacyValidationFailures++;
+    economyAudit.politicalEvents += run('SectorPolitics.getSummary(globalThis.__economySector).events');
+    if (!run('SectorPolitics.validate(globalThis.__economySector).ok')) economyAudit.politicsValidationFailures++;
+    economyAudit.factionStrategyReports += run('SectorStrategic.getFactionReports(globalThis.__economySector).length');
+    economyAudit.corporateStrategyReports += run('SectorStrategic.getCorporateReports(globalThis.__economySector).length');
+    if (!run('SectorStrategic.validate(globalThis.__economySector).ok')) economyAudit.strategyValidationFailures++;
+    const contractValidation = run('SectorTradeContracts.validate(globalThis.__economySector)');
+    if (!contractValidation.ok) economyAudit.contractsValidationFailures++;
+    economyAudit.contractRecords += contractValidation.counts.contracts;
+    economyAudit.contractLedgerEntries += contractValidation.counts.ledger;
+    const shipments = s.simulation.economy.logistics.shipments;
+    economyAudit.shipments += shipments.length;
+    economyAudit.shipmentLegs += shipments.reduce((n, shipment) => n + shipment.legs.length, 0);
+    economyAudit.deliveredShipments += shipments.filter(shipment => shipment.status === 'delivered').length;
+    for (const shipment of shipments) {
+      const losses = shipment.legs.reduce((n, leg) => n + Number(leg.quantityLost || 0), 0);
+      economyAudit.transitLossLots += losses;
+      const accounted = Number(shipment.remainingQuantity || 0) + Number(shipment.deliveredQuantity || 0) + losses;
+      if (Math.abs(Number(shipment.quantity) - accounted) > 0.021) economyAudit.cargoConservationFailures++;
+    }
+    const logisticsResult = run('SectorLogistics.validate(globalThis.__economySector)');
+    if (!logisticsResult.ok) economyAudit.logisticsValidationFailures++;
+    for (const state of s.simulation.economy.marketStates) {
+      for (const stock of state.inventory) {
+        if (!Number.isFinite(Number(stock.onHand)) || stock.onHand<0 || stock.onHand>stock.storageCapacity || stock.reserved>stock.onHand) economyAudit.invalidInventories++;
+      }
+      for (const ledger of state.ledger) for (const line of ledger.lines) {
+        const expected = line.opening + line.production - line.consumption - line.overflow;
+        if (Math.abs(line.closing-expected)>0.011) economyAudit.unbalancedLedgerLines++;
+      }
+    }
+    for (const market of s.markets) for (const good of market.goods) if (good.priceIndex<40 || good.priceIndex>300 || !Number.isFinite(good.localPrice) || good.localPrice<=0) economyAudit.outOfRangePrices++;
+    const result = run('SectorEconomy.validate(globalThis.__economySector)');
+    if (!result.ok) failures.push('economy validation errors: '+result.errors.slice(0,3).join('; '));
+  } catch (e) { economyAudit.crashes++; if (economyAudit.crashes<3) failures.push('economy stress crash: '+e.stack); }
+}
+assert(economyAudit.crashes===0, 'Economy stress crashes: '+economyAudit.crashes);
+assert(economyAudit.invalidInventories===0, 'Invalid economic inventory states: '+economyAudit.invalidInventories);
+assert(economyAudit.unbalancedLedgerLines===0, 'Unbalanced economy ledger lines: '+economyAudit.unbalancedLedgerLines);
+assert(economyAudit.outOfRangePrices===0, 'Economic price/projection range violations: '+economyAudit.outOfRangePrices);
+assert(economyAudit.cargoConservationFailures===0, 'Shipment cargo conservation failures: '+economyAudit.cargoConservationFailures);
+assert(economyAudit.logisticsValidationFailures===0, 'Logistics validation failures: '+economyAudit.logisticsValidationFailures);
+assert(economyAudit.financialValidationFailures===0, 'Financial settlement validation failures: '+economyAudit.financialValidationFailures);
+assert(economyAudit.diplomacyValidationFailures===0, 'Diplomacy validation failures: '+economyAudit.diplomacyValidationFailures);
+assert(economyAudit.politicsValidationFailures===0, 'Political-state validation failures: '+economyAudit.politicsValidationFailures);
+assert(economyAudit.strategyValidationFailures===0, 'Strategic assessment validation failures: '+economyAudit.strategyValidationFailures);
+assert(economyAudit.contractsValidationFailures===0, 'Trade contract validation failures: '+economyAudit.contractsValidationFailures);
+
 // Expanded World Generation stress, table values, and derived population outputs.
 let expandedCrashes = 0, expandedMissingEstimate = 0, expandedInvalidTech = 0;
 const validExpandedTech = new Set(['0','1','2','3','3+','4-','4','4+','5']);
@@ -187,6 +287,7 @@ for (let i=0; i<factionSectors; i++) {
     const systems = run('WorldGenerator.generate()');
     ctx.__turnSector = {systems, politicalGroups:run('PoliticalGroupGenerator.generate()'), corporations:run('CorporationGenerator.generate()'), religions:run('ReligionGenerator.generate()')};
     run('CampaignTools.enrichSector(globalThis.__turnSector, false)');
+    run('SectorSimulation.migrateSector(globalThis.__turnSector, {sourceApplicationVersion:"1.3.2"})');
     for (let t=0; t<factionTurns; t++) factionTurnEvents += run('CampaignTools.advanceFactionTurn(globalThis.__turnSector)').length;
     const factions = ctx.__turnSector.factions;
     const assetIds = new Set();
@@ -265,7 +366,7 @@ assert(stats.emptyThreat===0, 'Threat data incomplete');
 assert(stats.emptyPeople===0, 'People data incomplete');
 assert(stats.extraToolErrors===0, `Supplement tool failures: ${stats.extraToolErrors}`);
 const summary = {
-  stressRuns:stats.runs, crashes:stats.crashes, expandedStressRuns:expandedRuns, expandedCrashes, expandedMissingEstimate, expandedInvalidTech, legacyMigrationFailures, playerMigrationLeaks, factionSimulationSectors:factionSectors, factionTurnsPerSector:factionTurns, factionTurnCrashes, factionTurnEvents, factionBadAssets, factionBadCredits,
+  stressRuns:stats.runs, crashes:stats.crashes, alienCatalogAudit, expandedStressRuns:expandedRuns, expandedCrashes, expandedMissingEstimate, expandedInvalidTech, legacyMigrationFailures, playerMigrationLeaks, factionSimulationSectors:factionSectors, factionTurnsPerSector:factionTurns, factionTurnCrashes, factionTurnEvents, factionBadAssets, factionBadCredits,
   averageSystems:+(stats.systems/stats.runs).toFixed(2), averagePlanets:+(stats.planets/stats.runs).toFixed(2),
   duplicateCoords:stats.duplicateCoords, emptySystems:stats.emptySystems, duplicateTagPairs:stats.duplicateTags,
   missingBodies:stats.missingBodies, missingTerrain:stats.missingTerrain,
@@ -275,7 +376,7 @@ const summary = {
   incompleteFactionBatches:stats.emptyFaction, incompleteThreatBatches:stats.emptyThreat,
   incompletePeopleBatches:stats.emptyPeople, supplementToolFailures:stats.extraToolErrors,
   worldTagCount:run('WorldGenerator.tags.length'), poiTableCount:run('WorldGenerator.pointsOfInterest.length'),
-  densityAudit, gravitySample, overall:failures.length?'FAIL':'PASS', failures
+  economyAudit, turnPerformance:{samples:economyAudit.turnTimingsMs.length,systems:economyAudit.systems,markets:economyAudit.markets,minMs:economyAudit.turnTimingsMs.length?Math.min(...economyAudit.turnTimingsMs.map(x=>x.ms)):0,medianMs:(()=>{const a=economyAudit.turnTimingsMs.map(x=>x.ms).sort((x,y)=>x-y);return a.length?a[Math.floor(a.length/2)]:0;})(),maxMs:economyAudit.turnTimingsMs.length?Math.max(...economyAudit.turnTimingsMs.map(x=>x.ms)):0,turns:economyAudit.turnTimingsMs}, densityAudit, gravitySample, overall:failures.length?'FAIL':'PASS', failures
 };
 console.log(JSON.stringify(summary,null,2));
 if (failures.length) process.exitCode=1;
